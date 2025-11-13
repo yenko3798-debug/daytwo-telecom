@@ -322,6 +322,7 @@ export default function TopUpPage() {
   const [syncing, setSyncing] = useState(false);
 
   const unmounted = useRef(false);
+  const initialLoad = useRef(false);
   useEffect(() => {
     return () => {
       unmounted.current = true;
@@ -416,6 +417,8 @@ export default function TopUpPage() {
   );
 
   useEffect(() => {
+    if (initialLoad.current) return;
+    initialLoad.current = true;
     (async () => {
       await Promise.all([fetchUser(), fetchInvoices()]);
     })();
@@ -431,21 +434,23 @@ export default function TopUpPage() {
     if (!selectedOrderId) return null;
     return invoices.find((item) => item.orderId === selectedOrderId) ?? null;
   }, [invoices, selectedOrderId]);
+  const selectedStatus = selectedInvoice?.status ?? null;
 
   useEffect(() => {
     if (!selectedOrderId) return;
-    const current = invoices.find((item) => item.orderId === selectedOrderId);
-    if (current && finalStatuses.has(current.status)) return;
-    const interval = setInterval(async () => {
+    if (selectedStatus && finalStatuses.has(selectedStatus)) return;
+    let cancelled = false;
+    const orderId = selectedOrderId;
+    const interval = window.setInterval(async () => {
+      if (cancelled) return;
       try {
-        setSyncing(true);
-        const res = await fetch(
-          `/api/topup/invoices?orderId=${selectedOrderId}&sync=true`,
-          { cache: "no-store" }
-        );
+        if (!unmounted.current) setSyncing(true);
+        const res = await fetch(`/api/topup/invoices?orderId=${orderId}&sync=true`, {
+          cache: "no-store",
+        });
         const data = await res.json().catch(() => null);
         if (res.ok && data?.invoice) {
-          if (!unmounted.current) {
+          if (!cancelled && !unmounted.current) {
             setInvoices((prev) => {
               const index = prev.findIndex((item) => item.orderId === data.invoice.orderId);
               if (index >= 0) {
@@ -459,16 +464,19 @@ export default function TopUpPage() {
           if (finalStatuses.has(data.invoice.status)) {
             await fetchUser({ silent: true });
             await fetchInvoices({ silent: true });
-            if (!unmounted.current) setSelectedOrderId(null);
+            if (!cancelled && !unmounted.current) setSelectedOrderId(null);
           }
         }
       } catch {
       } finally {
-        if (!unmounted.current) setSyncing(false);
+        if (!cancelled && !unmounted.current) setSyncing(false);
       }
     }, 6000);
-    return () => clearInterval(interval);
-  }, [selectedOrderId, invoices, fetchUser, fetchInvoices]);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [selectedOrderId, selectedStatus, fetchUser, fetchInvoices]);
 
   const handleCreateInvoice = useCallback(async () => {
     if (creatingInvoice) return;
