@@ -16,6 +16,26 @@ Next, create a `.env.local` file in the root of your project and set the `NEXT_P
 NEXT_PUBLIC_SITE_URL=https://example.com
 ```
 
+Configure the remaining environment variables required for authentication, the database, and NowPayments:
+
+```
+DATABASE_URL=postgres://user:pass@host:5432/db
+JWT_SECRET=replace-with-secure-random-string
+APP_URL=https://example.com
+NOWPAYMENTS_API_KEY=your-nowpayments-api-key
+NOWPAYMENTS_IPN_SECRET=your-nowpayments-ipn-secret
+NOWPAYMENTS_BASE_URL=https://api.nowpayments.io/v1
+```
+
+Leave `NOWPAYMENTS_BASE_URL` unset to use the default production endpoint.
+
+Run the Prisma migrations after updating the schema:
+
+```bash
+npx prisma migrate deploy
+npx prisma generate
+```
+
 Next, run the development server:
 
 ```bash
