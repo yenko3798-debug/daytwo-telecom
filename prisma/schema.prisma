@@ -3,42 +3,270 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql" // change to "sqlite" for local quick start
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
+enum UserRole {
+  USER        @map("user")
+  ADMIN       @map("admin")
+  SUPERADMIN  @map("superadmin")
+}
+
+enum RouteStatus {
+  ACTIVE       @map("active")
+  INACTIVE     @map("inactive")
+  MAINTENANCE  @map("maintenance")
+}
+
+enum CampaignStatus {
+  DRAFT      @map("draft")
+  SCHEDULED  @map("scheduled")
+  RUNNING    @map("running")
+  PAUSED     @map("paused")
+  COMPLETED  @map("completed")
+  STOPPED    @map("stopped")
+  FAILED     @map("failed")
+}
+
+enum LeadStatus {
+  PENDING    @map("pending")
+  QUEUED     @map("queued")
+  DIALING    @map("dialing")
+  CONNECTED  @map("connected")
+  COMPLETED  @map("completed")
+  FAILED     @map("failed")
+  SKIPPED    @map("skipped")
+  PAUSED     @map("paused")
+}
+
+enum CallStatus {
+  CREATED    @map("created")
+  PLACING    @map("placing")
+  RINGING    @map("ringing")
+  ANSWERED   @map("answered")
+  COMPLETED  @map("completed")
+  FAILED     @map("failed")
+  HUNGUP     @map("hungup")
+  CANCELLED  @map("cancelled")
+}
+
+enum AdjustmentType {
+  CREDIT  @map("credit")
+  DEBIT   @map("debit")
+}
+
+enum AdjustmentSource {
+  ADMIN            @map("admin_adjustment")
+  TOPUP            @map("top_up")
+  CAMPAIGN_CHARGE  @map("campaign_charge")
+  REFUND           @map("refund")
+}
+
 model User {
-  id            String   @id @default(cuid())
-  email         String   @unique
-  name          String
-  passwordHash  String
-  balanceCents  Int      @default(0)   // $0.00 initially
-  role          String   @default("user")
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
-  topUps        TopUpInvoice[]
+  id                     String                @id @default(cuid())
+  email                  String                @unique
+  name                   String
+  passwordHash           String
+  balanceCents           Int                   @default(0)
+  role                   UserRole              @default(USER)
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+  topUps                 TopUpInvoice[]
+  callFlows              CallFlow[]
+  campaigns              Campaign[]
+  routes                 SipRoute[]            @relation("RouteCreators")
+  adjustments            BalanceAdjustment[]   @relation("UserAdjustments")
+  adjustmentsCreated     BalanceAdjustment[]   @relation("AdjustmentsCreatedBy")
+  updatedSettings        SystemSetting[]       @relation("SettingUpdatedBy")
 }
 
 model TopUpInvoice {
-  id            String   @id @default(cuid())
-  userId        String
-  orderId       String   @unique
-  invoiceId     String   @unique
-  paymentId     String?
-  amountCents   Int
-  payCurrency   String?
-  payAmount     String?
-  payAddress    String?
-  status        String   @default("pending")
-  invoiceUrl    String
-  nowpayInvoice Json?
-  lastIpn       Json?
-  settledAt     DateTime?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                   String               @id @default(cuid())
+  userId               String
+  orderId              String               @unique
+  invoiceId            String               @unique
+  paymentId            String?
+  amountCents          Int
+  payCurrency          String?
+  payAmount            String?
+  payAddress           String?
+  status               String               @default("pending")
+  invoiceUrl           String
+  nowpayInvoice        Json?
+  lastIpn              Json?
+  settledAt            DateTime?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  balanceAdjustmentId  String?
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balanceAdjustment BalanceAdjustment? @relation(fields: [balanceAdjustmentId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([status])
+}
+
+model CallFlow {
+  id          String      @id @default(cuid())
+  userId      String
+  name        String
+  description String?
+  definition  Json
+  isSystem    Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  campaigns  Campaign[]
+
+  @@index([userId])
+}
+
+model SipRoute {
+  id                 String        @id @default(cuid())
+  name               String
+  provider           String
+  domain             String
+  authUsername       String?
+  authPassword       String?
+  outboundUri        String?
+  trunkPrefix        String?
+  callerIdFormat     String?
+  maxChannels        Int           @default(50)
+  concurrencyLimit   Int?
+  costPerMinuteCents Int?          @default(0)
+  status             RouteStatus   @default(ACTIVE)
+  isPublic           Boolean       @default(true)
+  metadata           Json?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  createdById        String?
+
+  createdBy  User?        @relation("RouteCreators", fields: [createdById], references: [id])
+  campaigns  Campaign[]
+  calls      CallSession[]
+
+  @@index([status])
+}
+
+model Campaign {
+  id                  String          @id @default(cuid())
+  userId              String
+  callFlowId          String
+  routeId             String
+  name                String
+  description         String?
+  status              CampaignStatus  @default(DRAFT)
+  callerId            String
+  callsPerMinute      Int             @default(60)
+  maxConcurrentCalls  Int             @default(10)
+  ringTimeoutSeconds  Int             @default(45)
+  startAt             DateTime?
+  startedAt           DateTime?
+  completedAt         DateTime?
+  stopReason          String?
+  totalLeads          Int             @default(0)
+  dialedCount         Int             @default(0)
+  connectedCount      Int             @default(0)
+  dtmfCount           Int             @default(0)
+  costCents           Int             @default(0)
+  metadata            Json?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  callFlow  CallFlow  @relation(fields: [callFlowId], references: [id], onDelete: Restrict)
+  route     SipRoute  @relation(fields: [routeId], references: [id], onDelete: Restrict)
+  leads     CampaignLead[]
+  calls     CallSession[]
+
+  @@index([userId])
+  @@index([status])
+}
+
+model CampaignLead {
+  id                String       @id @default(cuid())
+  campaignId        String
+  phoneNumber       String
+  normalizedNumber  String
+  status            LeadStatus   @default(PENDING)
+  dtmf              String?
+  attempts          Int          @default(0)
+  lastDialedAt      DateTime?
+  metadata          Json?
+  error             String?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  campaign  Campaign     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  calls     CallSession[]
+
+  @@index([campaignId])
+  @@index([campaignId, status])
+  @@unique([campaignId, phoneNumber])
+}
+
+model CallSession {
+  id              String      @id @default(cuid())
+  campaignId      String
+  leadId          String
+  routeId         String
+  ariChannelId    String?
+  externalId      String?
+  status          CallStatus  @default(CREATED)
+  callerId        String
+  dialedNumber    String
+  requestedAt     DateTime    @default(now())
+  startedAt       DateTime?
+  answeredAt      DateTime?
+  completedAt     DateTime?
+  durationSeconds Int         @default(0)
+  costCents       Int         @default(0)
+  dtmf            String?
+  recordingUrl    String?
+  metadata        Json?
+  error           String?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  campaign  Campaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  lead      CampaignLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  route     SipRoute    @relation(fields: [routeId], references: [id], onDelete: Restrict)
+
+  @@index([campaignId])
+  @@index([leadId])
+  @@index([routeId])
+  @@index([status])
+  @@index([ariChannelId])
+}
+
+model BalanceAdjustment {
+  id             String            @id @default(cuid())
+  userId         String
+  createdById    String?
+  amountCents    Int
+  type           AdjustmentType
+  source         AdjustmentSource
+  reason         String?
+  referenceId    String?
+  metadata       Json?
+  createdAt      DateTime          @default(now())
+
+  user       User  @relation("UserAdjustments", fields: [userId], references: [id], onDelete: Cascade)
+  createdBy  User? @relation("AdjustmentsCreatedBy", fields: [createdById], references: [id])
+  invoices   TopUpInvoice[]
+
+  @@index([userId])
+  @@index([source])
+}
+
+model SystemSetting {
+  key          String   @id
+  value        Json
+  description  String?
+  updatedById  String?
+  updatedAt    DateTime @updatedAt
+
+  updatedBy  User? @relation("SettingUpdatedBy", fields: [updatedById], references: [id])
 }

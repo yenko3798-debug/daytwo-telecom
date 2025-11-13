@@ -13,21 +13,21 @@ export async function POST(req: Request) {
   try {
     const { email, password } = LoginBody.parse(await req.json());
     const user = await prisma.user.findUnique({ where: { email } });
-    if (!user) return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+      if (!user) return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
 
-    const ok = await bcrypt.compare(password, user.passwordHash);
-    if (!ok) return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
+      const ok = await bcrypt.compare(password, user.passwordHash);
+      if (!ok) return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
 
-    await createSessionCookie({
-      sub: user.id,
-      email: user.email,
-      name: user.name,
-      role: user.role,
-    });
+      await createSessionCookie({
+        sub: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role.toLowerCase(),
+      });
 
-    return NextResponse.json({
-      user: { id: user.id, email: user.email, name: user.name, role: user.role },
-    });
+      return NextResponse.json({
+        user: { id: user.id, email: user.email, name: user.name, role: user.role.toLowerCase() },
+      });
   } catch (err: any) {
     if (err?.issues?.[0]?.message) {
       return NextResponse.json({ error: err.issues[0].message }, { status: 400 });

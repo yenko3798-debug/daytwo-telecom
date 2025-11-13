@@ -13,7 +13,7 @@ import {
 import { LayoutGroup, motion } from 'framer-motion'
 import clsx from 'clsx'
 
-const navItems = [
+const baseNavItems = [
   { href: '/start', label: 'Start' },
   { href: '/dashboard', label: 'Dashboard' },
   { href: '/campaigns', label: 'Campaigns' },
@@ -71,11 +71,12 @@ function ThemeToggle({ className }) {
   )
 }
 
-function DesktopNav({ pathname }) {
+function DesktopNav({ pathname, isAdmin }) {
+  const items = isAdmin ? [...baseNavItems, { href: '/admin', label: 'Admin' }] : baseNavItems
   return (
     <LayoutGroup>
       <nav className="hidden items-center gap-1 rounded-full bg-white/50 p-1 shadow-inner ring-1 ring-zinc-900/10 backdrop-blur-md dark:bg-white/10 dark:ring-white/10 md:flex">
-        {navItems.map((item) => {
+        {items.map((item) => {
           const active =
             pathname === item.href ||
             (item.href !== '/' && pathname.startsWith(item.href))
@@ -106,7 +107,8 @@ function DesktopNav({ pathname }) {
   )
 }
 
-function MobileNav({ pathname }) {
+function MobileNav({ pathname, isAdmin }) {
+  const items = isAdmin ? [...baseNavItems, { href: '/admin', label: 'Admin' }] : baseNavItems
   return (
     <Popover className="md:hidden">
       <PopoverButton className="inline-flex items-center rounded-full bg-white/70 px-3 py-2 text-sm font-semibold text-zinc-800 shadow-sm ring-1 ring-zinc-900/10 backdrop-blur transition duration-200 hover:bg-white dark:bg-white/10 dark:text-zinc-100 dark:ring-white/10">
@@ -115,7 +117,7 @@ function MobileNav({ pathname }) {
       <PopoverBackdrop className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm duration-200 data-closed:opacity-0" />
       <PopoverPanel className="fixed inset-x-4 top-28 z-50 origin-top rounded-3xl bg-[#f8f6f1]/95 p-4 shadow-2xl ring-1 ring-zinc-900/10 transition duration-200 data-closed:-translate-y-3 data-closed:opacity-0 dark:bg-[#0b0d13]/95 dark:ring-white/10">
         <div className="flex flex-col gap-2">
-          {navItems.map((item) => {
+          {items.map((item) => {
             const active =
               pathname === item.href ||
               (item.href !== '/' && pathname.startsWith(item.href))
@@ -186,13 +188,27 @@ function MoonIcon() {
 
 export function Header() {
   const pathname = usePathname()
+  const [isAdmin, setIsAdmin] = useState(false)
+  useEffect(() => {
+    ;(async () => {
+      try {
+        const res = await fetch('/api/me', { cache: 'no-store' })
+        if (!res.ok) return
+        const data = await res.json()
+        const role = data?.user?.role
+        if (role === 'admin' || role === 'superadmin') setIsAdmin(true)
+      } catch {
+        setIsAdmin(false)
+      }
+    })()
+  }, [])
 
   return (
     <header className="relative z-20 px-4 pt-6 sm:px-6 lg:px-8">
       <div className="absolute inset-x-0 top-0 z-[-1] h-32 bg-gradient-to-b from-[#f4f2ed] via-[#f4f2ed]/75 to-transparent dark:from-[#05070c] dark:via-[#05070c]/75" />
       <div className="mx-auto flex w-full max-w-7xl items-center justify-between rounded-[2.75rem] bg-white/70 px-4 py-3 shadow-[0_24px_60px_rgba(15,23,42,0.14)] ring-1 ring-zinc-900/10 backdrop-blur-xl dark:bg-[#0c0f16]/80 dark:ring-white/10 md:px-6 md:py-4">
         <BrandMark />
-        <DesktopNav pathname={pathname} />
+          <DesktopNav pathname={pathname} isAdmin={isAdmin} />
         <div className="flex items-center gap-2 md:gap-3">
           <ThemeToggle />
           <Link
@@ -201,7 +217,7 @@ export function Header() {
           >
             Account
           </Link>
-          <MobileNav pathname={pathname} />
+            <MobileNav pathname={pathname} isAdmin={isAdmin} />
         </div>
       </div>
     </header>

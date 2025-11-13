@@ -14,10 +14,10 @@ const COOKIE_OPTIONS = {
 };
 
 export type SessionPayload = {
-  sub: string;   // user id
+  sub: string;
   email: string;
   name: string;
-  role: string;
+  role: "user" | "admin" | "superadmin";
 };
 
 export async function createSessionCookie(payload: SessionPayload) {
