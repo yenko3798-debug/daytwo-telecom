@@ -60,11 +60,27 @@ const Icons = {
 /* ---------- tiny toast ---------- */
 function useToast() {
   const [toasts, setToasts] = useState([]);
-  const push = (msg) => {
-    const id = Math.random().toString(36).slice(2);
-    setToasts((t) => [...t, { id, msg }]);
-    setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 1800);
-  };
+  const timers = useRef<Set<number>>(new Set());
+  const push = useCallback(
+    (msg) => {
+      const id = Math.random().toString(36).slice(2);
+      setToasts((t) => [...t, { id, msg }]);
+      const handle = window.setTimeout(() => {
+        setToasts((t) => t.filter((x) => x.id !== id));
+        timers.current.delete(handle);
+      }, 1800);
+      timers.current.add(handle);
+    },
+    [setToasts]
+  );
+  useEffect(() => {
+    return () => {
+      timers.current.forEach((handle) => {
+        window.clearTimeout(handle);
+      });
+      timers.current.clear();
+    };
+  }, []);
   function View() {
     return (
       <div className="pointer-events-none fixed right-4 top-4 z-[60] flex max-w-sm flex-col items-end space-y-2">
