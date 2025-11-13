@@ -58,3 +58,34 @@
     background-position: 120% 0;
   }
 }
+
+.lux-shimmer {
+  position: relative;
+  overflow: hidden;
+  background: linear-gradient(
+    125deg,
+    rgba(255, 255, 255, 0.25) 0%,
+    rgba(255, 255, 255, 0.55) 45%,
+    rgba(255, 255, 255, 0.25) 100%
+  );
+  background-size: 200% 100%;
+  animation: lux-shimmer 1.8s ease-in-out infinite;
+}
+
+.dark .lux-shimmer {
+  background: linear-gradient(
+    125deg,
+    rgba(15, 23, 42, 0.6) 0%,
+    rgba(148, 163, 184, 0.4) 45%,
+    rgba(30, 41, 59, 0.55) 100%
+  );
+}
+
+@keyframes lux-shimmer {
+  0% {
+    background-position: -120% 0;
+  }
+  100% {
+    background-position: 120% 0;
+  }
+}
