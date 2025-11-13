@@ -1,4 +1,4 @@
-import { parsePhoneNumberFromString, type CountryCode } from 'libphonenumber-js';
+import { parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js";
 
 const PHONE_REGEX = /\+?\d[\d\s().-]{6,}/g;
 
@@ -23,4 +23,24 @@ export function extractPhonesWithContext(
   }
 
   return results;
+}
+
+export function normalizePhoneNumber(input: string, defaultCountry: CountryCode = "US") {
+  const parsed = parsePhoneNumberFromString(input, { defaultCountry });
+  if (parsed?.isPossible()) return parsed.number;
+  const digits = input.replace(/\D/g, "");
+  if (!digits) return null;
+  if (digits.startsWith("00") && digits.length > 2) return `+${digits.slice(2)}`;
+  if (digits.startsWith("1") && digits.length === 11) return `+${digits}`;
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.startsWith("+")) return digits;
+  return `+${digits}`;
+}
+
+export function toDialable(normalized: string, trunkPrefix?: string | null) {
+  const digits = normalized.startsWith("+") ? normalized.slice(1) : normalized;
+  if (trunkPrefix) {
+    return `${trunkPrefix}${digits}`;
+  }
+  return normalized;
 }

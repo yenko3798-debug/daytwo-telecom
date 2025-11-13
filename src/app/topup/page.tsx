@@ -322,7 +322,6 @@ export default function TopUpPage() {
   const [syncing, setSyncing] = useState(false);
 
   const unmounted = useRef(false);
-  const initialLoad = useRef(false);
   useEffect(() => {
     return () => {
       unmounted.current = true;
@@ -417,8 +416,6 @@ export default function TopUpPage() {
   );
 
   useEffect(() => {
-    if (initialLoad.current) return;
-    initialLoad.current = true;
     (async () => {
       await Promise.all([fetchUser(), fetchInvoices()]);
     })();

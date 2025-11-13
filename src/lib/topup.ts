@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { AdjustmentSource, AdjustmentType, Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 
 const creditStatuses = new Set(["finished"]);
@@ -37,23 +37,35 @@ export async function applyTopUpStatus(options: StatusOptions) {
       status: normalizedStatus,
     };
 
-    if (options.payAmount !== undefined) data.payAmount = options.payAmount;
-    if (options.payCurrency !== undefined)
-      data.payCurrency = options.payCurrency ? options.payCurrency.toLowerCase() : null;
-    if (options.payAddress !== undefined)
-      data.payAddress = options.payAddress ? String(options.payAddress) : null;
-    if (options.paymentId !== undefined) data.paymentId = options.paymentId;
-    if (options.ipnPayload !== undefined) data.lastIpn = options.ipnPayload;
-    if (options.nowpayInvoice !== undefined) data.nowpayInvoice = options.nowpayInvoice;
+      if (options.payAmount !== undefined) data.payAmount = options.payAmount;
+      if (options.payCurrency !== undefined)
+        data.payCurrency = options.payCurrency ? options.payCurrency.toLowerCase() : null;
+      if (options.payAddress !== undefined)
+        data.payAddress = options.payAddress ? String(options.payAddress) : null;
+      if (options.paymentId !== undefined) data.paymentId = options.paymentId;
+      if (options.ipnPayload !== undefined) data.lastIpn = options.ipnPayload;
+      if (options.nowpayInvoice !== undefined) data.nowpayInvoice = options.nowpayInvoice;
 
-    const shouldCredit = shouldCreditForStatus(normalizedStatus) && !existing.settledAt;
-    if (shouldCredit) {
-      data.settledAt = new Date();
-      await tx.user.update({
-        where: { id: existing.userId },
-        data: { balanceCents: { increment: existing.amountCents } },
-      });
-    }
+      const shouldCredit = shouldCreditForStatus(normalizedStatus) && !existing.settledAt;
+      if (shouldCredit) {
+        const adjustment = await tx.balanceAdjustment.create({
+          data: {
+            userId: existing.userId,
+            createdById: null,
+            amountCents: existing.amountCents,
+            type: AdjustmentType.CREDIT,
+            source: AdjustmentSource.TOPUP,
+            reason: `Top-up ${existing.orderId}`,
+            referenceId: existing.id,
+          },
+        });
+        data.settledAt = new Date();
+        data.balanceAdjustment = { connect: { id: adjustment.id } };
+        await tx.user.update({
+          where: { id: existing.userId },
+          data: { balanceCents: { increment: existing.amountCents } },
+        });
+      }
 
     const updated = await tx.topUpInvoice.update({
       where: { orderId: options.orderId },

@@ -11,5 +11,12 @@ export async function GET() {
     select: { id: true, email: true, name: true, role: true, balanceCents: true },
   });
 
-  return NextResponse.json({ user });
+  return NextResponse.json({
+    user: user
+      ? {
+          ...user,
+          role: user.role.toLowerCase(),
+        }
+      : null,
+  });
 }

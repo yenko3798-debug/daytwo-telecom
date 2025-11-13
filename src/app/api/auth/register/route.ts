@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { UserRole } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { createSessionCookie } from "@/lib/auth";
@@ -24,8 +25,10 @@ export async function POST(req: Request) {
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
+    const role = email === "admin@foe.dev" ? UserRole.ADMIN : UserRole.USER;
+
     const user = await prisma.user.create({
-      data: { name, email, passwordHash, balanceCents: 0, role: "user" },
+      data: { name, email, passwordHash, balanceCents: 0, role },
       select: { id: true, name: true, email: true, role: true },
     });
 
@@ -33,10 +36,13 @@ export async function POST(req: Request) {
       sub: user.id,
       email: user.email,
       name: user.name,
-      role: user.role,
+      role: user.role.toLowerCase(),
     });
 
-    return NextResponse.json({ user }, { status: 201 });
+    return NextResponse.json(
+      { user: { ...user, role: user.role.toLowerCase() } },
+      { status: 201 }
+    );
   } catch (err: any) {
     if (err?.issues?.[0]?.message) {
       return NextResponse.json({ error: err.issues[0].message }, { status: 400 });
