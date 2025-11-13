@@ -16,4 +16,29 @@ model User {
   role          String   @default("user")
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+  topUps        TopUpInvoice[]
+}
+
+model TopUpInvoice {
+  id            String   @id @default(cuid())
+  userId        String
+  orderId       String   @unique
+  invoiceId     String   @unique
+  paymentId     String?
+  amountCents   Int
+  payCurrency   String?
+  payAmount     String?
+  payAddress    String?
+  status        String   @default("pending")
+  invoiceUrl    String
+  nowpayInvoice Json?
+  lastIpn       Json?
+  settledAt     DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
 }
