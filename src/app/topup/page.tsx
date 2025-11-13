@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Dialog, DialogBackdrop, DialogPanel } from "@headlessui/react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Container } from "@/components/Container";
+import { PageFrame, MotionCard, ShimmerTile } from "@/components/ui/LuxuryPrimitives";
 
 /* ---------- tiny inline icons (no external deps) ---------- */
 const Icons = {
@@ -106,14 +106,15 @@ function ActionButton({ label, Icon, onClick }) {
 
 function TokenRowSkeleton() {
   return (
-    <div className="animate-pulse rounded-xl px-2 py-3">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-full bg-zinc-900/10 dark:bg-white/10" />
-          <div className="h-4 w-28 rounded bg-zinc-900/10 dark:bg-white/10" />
+    <div className="flex items-center justify-between px-2 py-2">
+      <div className="flex items-center gap-3">
+        <ShimmerTile className="h-10 w-10 rounded-full" />
+        <div className="space-y-2">
+          <ShimmerTile className="h-3 w-28 rounded-full" />
+          <ShimmerTile className="h-3 w-20 rounded-full" />
         </div>
-        <div className="h-4 w-16 rounded bg-zinc-900/10 dark:bg-white/10" />
       </div>
+      <ShimmerTile className="h-3 w-16 rounded-full" />
     </div>
   );
 }
@@ -144,30 +145,25 @@ function TokenRow({ icon, name, value, sub, onClick }) {
   );
 }
 
-function SectionCard({ title, children, footer, loading }) {
+function SectionCard({ title, children, footer, loading, tone }: { title?: string; children: React.ReactNode; footer?: React.ReactNode; loading?: boolean; tone?: "emerald" | "violet" | "neutral"; }) {
+  const cardTone = tone === "emerald" ? "emerald" : tone === "violet" ? "violet" : "neutral";
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 8 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="rounded-2xl bg-white/70 p-4 shadow-sm ring-1 ring-zinc-900/10 backdrop-blur-sm dark:bg-zinc-900/60 dark:ring-white/10"
-    >
+    <MotionCard tone={cardTone} className="p-5 sm:p-6">
       {title ? (
-        <h3 className="mb-3 text-sm font-semibold tracking-tight text-zinc-600 dark:text-zinc-300">
+        <h3 className="mb-3 text-sm font-semibold tracking-tight text-zinc-600 dark:text-zinc-200">
           {title}
         </h3>
       ) : null}
       {loading ? (
-        <div className="animate-pulse space-y-3">
-          <div className="h-12 rounded-lg bg-zinc-900/10 dark:bg-white/10" />
-          <div className="h-3 w-2/3 rounded bg-zinc-900/10 dark:bg-white/10" />
+        <div className="space-y-3">
+          <ShimmerTile className="h-12 rounded-xl" />
+          <ShimmerTile className="h-3 w-2/3 rounded-full" />
         </div>
       ) : (
         children
       )}
-      {footer ? (
-        <div className="mt-4 border-t border-zinc-900/10 pt-3 dark:border-white/10">{footer}</div>
-      ) : null}
-    </motion.div>
+      {footer ? <div className="mt-4 border-t border-white/50 pt-3 text-xs text-zinc-500 dark:border-white/10 dark:text-zinc-400">{footer}</div> : null}
+    </MotionCard>
   );
 }
 
@@ -315,11 +311,28 @@ export default function TopUpPage() {
     max = 20;
   const pct = ((packs - min) / (max - min)) * 100;
 
+  const heroActions = (
+    <motion.button
+      whileHover={{ y: -2 }}
+      whileTap={{ scale: 0.97 }}
+      onClick={() => setQrOpen(true)}
+      className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-emerald-500 via-teal-500 to-sky-500 px-4 py-2 text-sm font-semibold text-white shadow-[0_16px_32px_rgba(13,148,136,0.35)] transition hover:shadow-[0_22px_42px_rgba(13,148,136,0.45)]"
+    >
+      <Icons.ArrowDownToLine className="h-4 w-4" />
+      Receive funds
+    </motion.button>
+  );
+
   return (
-    <Container>
+    <PageFrame
+      eyebrow="Billing"
+      title="Balance studio"
+      description="Design multi-chain funding flows, schedule pack purchases and keep wallets in sync with luxe microinteractions."
+      actions={heroActions}
+    >
       <Toasts />
 
-      <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-6 py-8 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* LEFT COLUMN */}
         <div className="lg:col-span-1">
           <motion.div
@@ -611,12 +624,7 @@ export default function TopUpPage() {
         </div>
       </div>
 
-      <QrModal
-        open={qrOpen}
-        onClose={() => setQrOpen(false)}
-        address={qrAddr}
-        network={network}
-      />
-    </Container>
+      <QrModal open={qrOpen} onClose={() => setQrOpen(false)} address={qrAddr} network={network} />
+    </PageFrame>
   );
 }

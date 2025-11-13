@@ -2,7 +2,8 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Container } from "@/components/Container";
+import { PageFrame, MotionCard, ShimmerTile } from "@/components/ui/LuxuryPrimitives";
+import { usePageLoading } from "@/hooks/usePageLoading";
 
 // --- inline icons (no external deps) ---
 const Icon = {
@@ -78,6 +79,7 @@ export default function GlobalStatus(){
   const [rows, t] = useGlobalMock();
   const [range, setRange] = useState("24h"); // 24h | 7d | 30d
   const [dtmfOnly, setDtmfOnly] = useState(false);
+  const { loading } = usePageLoading(700);
 
   // aggregate (pretend these are global counters)
   const metrics = useMemo(()=>{
@@ -106,79 +108,108 @@ export default function GlobalStatus(){
   }
 
   return (
-    <div className="relative min-h-[100dvh] overflow-hidden bg-[radial-gradient(1400px_600px_at_0%_-10%,rgba(16,185,129,0.18),transparent),radial-gradient(900px_500px_at_100%_110%,rgba(124,58,237,0.14),transparent)]">
-      <div className="pointer-events-none absolute inset-0 opacity-[0.06] [background:linear-gradient(to_right,#fff_1px,transparent_1px),linear-gradient(to_bottom,#fff_1px,transparent_1px)] [background-size:60px_60px]"></div>
+    <PageFrame
+      eyebrow="Status"
+      title="Global status"
+      description="Public real-time overview of calls, conversion and throughput."
+      actions={
+        <div className="flex items-center gap-2">
+          <button
+            onClick={exportCsv}
+            className="inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/80 px-4 py-2 text-xs font-semibold text-zinc-700 shadow-[0_16px_32px_rgba(15,23,42,0.12)] transition hover:-translate-y-0.5 hover:bg-white dark:border-white/10 dark:bg-white/5 dark:text-zinc-200"
+          >
+            <Icon.Download className="h-4 w-4" />
+            Export CSV
+          </button>
+          <a
+            href="/auth"
+            className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-emerald-500 via-teal-500 to-sky-500 px-4 py-2 text-xs font-semibold text-white shadow-[0_16px_32px_rgba(13,148,136,0.35)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_42px_rgba(13,148,136,0.45)]"
+          >
+            Sign in
+          </a>
+        </div>
+      }
+    >
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard title="Total calls" value={n(metrics.total)} trend={+sparkA.at(-1) - +sparkA.at(-2)} loading={loading}>
+          <Spark data={sparkA} className="h-8 w-full" />
+        </MetricCard>
+        <MetricCard
+          title="Answered (ASR)"
+          value={`${n(metrics.answered)} • ${metrics.asr}%`}
+          tone="emerald"
+          loading={loading}
+        >
+          <Spark data={sparkB} className="h-8 w-full" />
+        </MetricCard>
+        <MetricCard
+          title="DTMF captured"
+          value={`${n(metrics.dtmf)} • ${metrics.conv}%`}
+          tone="violet"
+          loading={loading}
+        />
+        <MetricCard title="Spend" value={`$${metrics.spend}`} tone="amber" loading={loading} />
+      </div>
 
-      <Container>
-        <div className="mx-auto w-full max-w-7xl py-10">
-          {/* header */}
-          <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h1 className="text-xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">Global status</h1>
-              <p className="text-xs text-zinc-500">Public real‑time overview of calls, conversion and throughput.</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <button onClick={exportCsv} className="inline-flex items-center gap-2 rounded-xl bg-white/70 px-3 py-2 text-xs ring-1 ring-zinc-900/10 transition hover:bg-white dark:bg-zinc-900/60 dark:ring-white/10 dark:hover:bg-zinc-900"><Icon.Download className="h-4 w-4"/> Export CSV</button>
-              <a href="/auth" className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-3 py-2 text-xs font-semibold text-white ring-1 ring-emerald-500/30 transition hover:bg-emerald-500/90">Sign in</a>
-            </div>
+      <MotionCard tone="neutral" className="mt-6 space-y-4 p-6">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/80 px-3 py-1 text-xs text-zinc-500 shadow-sm dark:border-white/10 dark:bg-white/5 dark:text-zinc-400">
+            <span>Range</span>
+            {(["24h","7d","30d"]).map((r)=> (
+              <button
+                key={r}
+                onClick={()=>setRange(r)}
+                className={cn(
+                  "rounded-full px-2 py-0.5 font-semibold transition",
+                  range===r ? "bg-emerald-500 text-white shadow-sm" : "hover:bg-white/60 dark:hover:bg-white/10"
+                )}
+              >
+                {r}
+              </button>
+            ))}
           </div>
+          <label className="ml-auto inline-flex cursor-pointer items-center gap-2 rounded-full border border-white/60 bg-white/80 px-4 py-1.5 text-xs text-zinc-600 shadow-sm dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
+            <input type="checkbox" checked={dtmfOnly} onChange={(e)=>setDtmfOnly(e.target.checked)} className="accent-emerald-500"/>
+            DTMF only
+          </label>
+        </div>
 
-          {/* metric cards */}
-          <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <Metric title="Total calls" value={n(metrics.total)} trend={+sparkA.at(-1) - +sparkA.at(-2)}>
-              <Spark data={sparkA} className="h-8 w-full"/>
-            </Metric>
-            <Metric title="Answered (ASR)" value={`${n(metrics.answered)} • ${metrics.asr}%`} tone="emerald">
-              <Spark data={sparkB} className="h-8 w-full"/>
-            </Metric>
-            <Metric title="DTMF captured" value={`${n(metrics.dtmf)} • ${metrics.conv}%`} tone="violet"/>
-            <Metric title="Spend" value={`$${metrics.spend}`} tone="amber"/>
+        {loading ? (
+          <div className="space-y-3">
+            {Array.from({ length: 8 }).map((_, index) => (
+              <ShimmerTile key={index} className="h-14 rounded-2xl" />
+            ))}
           </div>
-
-          {/* switches & filters */}
-          <div className="mb-4 flex flex-wrap items-center gap-2">
-            <div className="inline-flex items-center gap-2 rounded-xl bg-white/70 px-2 py-1 text-xs ring-1 ring-zinc-900/10 backdrop-blur dark:bg-zinc-900/60 dark:ring-white/10">
-              <span className="text-zinc-500">Range</span>
-              {(["24h","7d","30d"]).map((r)=> (
-                <button key={r} onClick={()=>setRange(r)} className={cn("rounded-full px-2 py-0.5", range===r?"bg-emerald-500 text-white":"hover:bg-zinc-900/5 dark:hover:bg-white/10")}>{r}</button>
-              ))}
-            </div>
-            <label className="ml-auto inline-flex cursor-pointer items-center gap-2 rounded-xl bg-white/70 px-3 py-1.5 text-xs ring-1 ring-zinc-900/10 dark:bg-zinc-900/60 dark:ring-white/10">
-              <input type="checkbox" checked={dtmfOnly} onChange={(e)=>setDtmfOnly(e.target.checked)} className="accent-emerald-500"/>
-              DTMF only
-            </label>
-          </div>
-
-          {/* live list */}
-          <div className="overflow-hidden rounded-2xl ring-1 ring-zinc-900/10 dark:ring-white/10">
+        ) : (
+          <div className="overflow-hidden rounded-3xl border border-white/60 bg-white/80 shadow-inner backdrop-blur dark:border-white/10 dark:bg-white/5">
             <div className="max-h-[520px] overflow-auto">
-              <table className="min-w-full divide-y divide-zinc-900/10 dark:divide-white/10">
-                <thead className="bg-zinc-50/70 dark:bg-zinc-900/30">
-                  <tr className="text-left text-xs text-zinc-500">
-                    <th className="px-4 py-3">Time</th>
-                    <th className="px-4 py-3">Caller → Callee</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3">Dur</th>
-                    <th className="px-4 py-3">DTMF</th>
-                    <th className="px-4 py-3">Cost</th>
+              <table className="min-w-full divide-y divide-white/60 text-sm dark:divide-white/10">
+                <thead className="bg-white/80 text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:bg-white/5 dark:text-zinc-400">
+                  <tr>
+                    <th className="px-5 py-4 text-left">Time</th>
+                    <th className="px-5 py-4 text-left">Caller → Callee</th>
+                    <th className="px-5 py-4 text-left">Status</th>
+                    <th className="px-5 py-4 text-left">Dur</th>
+                    <th className="px-5 py-4 text-left">DTMF</th>
+                    <th className="px-5 py-4 text-left">Cost</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-zinc-900/5 dark:divide-white/5 text-sm">
+                <tbody className="divide-y divide-white/50 bg-white/60 dark:divide-white/5 dark:bg-transparent">
                   <AnimatePresence initial={false}>
                     {display.map((r)=> (
-                      <motion.tr key={r.id} layout initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="hover:bg-zinc-900/2.5 dark:hover:bg-white/5">
-                        <td className="px-4 py-2 whitespace-nowrap text-zinc-500">{new Date(r.time).toLocaleTimeString()}</td>
-                        <td className="px-4 py-2">
+                      <motion.tr key={r.id} layout initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="transition hover:bg-white dark:hover:bg-white/5">
+                        <td className="px-5 py-3 whitespace-nowrap text-zinc-500 dark:text-zinc-400">{new Date(r.time).toLocaleTimeString()}</td>
+                        <td className="px-5 py-3">
                           <div className="flex items-center gap-2">
-                            <span className="font-medium text-zinc-900 dark:text-zinc-100">{r.caller}</span>
+                            <span className="font-semibold text-zinc-800 dark:text-zinc-100">{r.caller}</span>
                             <span className="text-zinc-500">→</span>
                             <span className="text-zinc-700 dark:text-zinc-200">{r.callee}</span>
                           </div>
                         </td>
-                        <td className="px-4 py-2"><Badge value={r.status}/></td>
-                        <td className="px-4 py-2 tabular-nums text-zinc-700 dark:text-zinc-200">{r.duration ? `${r.duration}s` : "—"}</td>
-                        <td className="px-4 py-2 font-mono text-xs">{r.dtmf || ""}</td>
-                        <td className="px-4 py-2 tabular-nums">${r.cost.toFixed(4)}</td>
+                        <td className="px-5 py-3"><Badge value={r.status}/></td>
+                        <td className="px-5 py-3 tabular-nums text-zinc-700 dark:text-zinc-200">{r.duration ? `${r.duration}s` : "—"}</td>
+                        <td className="px-5 py-3 font-mono text-xs text-zinc-500 dark:text-zinc-300">{r.dtmf || ""}</td>
+                        <td className="px-5 py-3 tabular-nums text-zinc-700 dark:text-zinc-100">${r.cost.toFixed(4)}</td>
                       </motion.tr>
                     ))}
                   </AnimatePresence>
@@ -186,39 +217,77 @@ export default function GlobalStatus(){
               </table>
             </div>
           </div>
+        )}
 
-          <p className="mt-3 text-xs text-zinc-500">Public feed • Showing {display.length} of {rows.length} events • Active campaigns: {metrics.active} • Current CPS: {metrics.cps}</p>
-        </div>
-      </Container>
-    </div>
+        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+          Public feed • Showing {display.length} of {rows.length} events • Active campaigns: {metrics.active} • Current CPS: {metrics.cps}
+        </p>
+      </MotionCard>
+    </PageFrame>
   );
 }
 
-function Metric({title, value, children, tone, trend}:{title:string, value:React.ReactNode, children?:React.ReactNode, tone?:"emerald"|"violet"|"amber", trend?:number}){
-  const ring = tone === "emerald" ? "ring-emerald-400/30" : tone === "violet" ? "ring-violet-400/30" : tone === "amber" ? "ring-amber-400/30" : "ring-zinc-900/10";
+function MetricCard({
+  title,
+  value,
+  children,
+  tone = "neutral",
+  trend,
+  loading,
+}: {
+  title: string;
+  value: React.ReactNode;
+  children?: React.ReactNode;
+  tone?: "emerald" | "violet" | "amber" | "neutral";
+  trend?: number;
+  loading?: boolean;
+}) {
   const up = (trend ?? 1) >= 0;
   return (
-    <div className={`rounded-2xl bg-white/70 p-4 ring-1 backdrop-blur-sm dark:bg-zinc-900/60 ${ring}`}>
-      <div className="text-xs text-zinc-500">{title}</div>
-      <div className="mt-1 flex items-center gap-2 text-xl font-semibold text-zinc-900 dark:text-zinc-100">
-        {value}
-        <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] ring-1", up?"text-emerald-600 ring-emerald-500/30 bg-emerald-500/10":"text-rose-600 ring-rose-500/30 bg-rose-500/10")}>{up? <Icon.ArrowUp className="h-3 w-3"/> : <Icon.ArrowDown className="h-3 w-3"/>}{up?"up":"down"}</span>
+    <MotionCard tone={tone} className="p-5 sm:p-6">
+      <div className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
+        {title}
       </div>
-      {children}
-    </div>
+      {loading ? (
+        <div className="mt-3 space-y-3">
+          <ShimmerTile className="h-8 rounded-xl" />
+          {children ? <ShimmerTile className="h-6 rounded-xl" /> : null}
+        </div>
+      ) : (
+        <>
+          <div className="mt-2 flex items-center gap-2 text-2xl font-semibold text-zinc-900 dark:text-white">
+            {value}
+            {trend !== undefined ? (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1",
+                  up
+                    ? "bg-emerald-500/10 text-emerald-600 ring-emerald-500/30"
+                    : "bg-rose-500/10 text-rose-600 ring-rose-500/30",
+                )}
+              >
+                {up ? <Icon.ArrowUp className="h-3 w-3" /> : <Icon.ArrowDown className="h-3 w-3" />}
+                {up ? "up" : "down"}
+              </span>
+            ) : null}
+          </div>
+          {children}
+        </>
+      )}
+    </MotionCard>
   );
 }
 
 function Badge({value}:{value:string}){
   const map = {
-    queued: "bg-zinc-500/15 text-zinc-600 ring-zinc-500/30",
-    ringing: "bg-sky-500/15 text-sky-600 ring-sky-500/30",
-    answered: "bg-emerald-500/15 text-emerald-600 ring-emerald-500/30",
-    voicemail: "bg-violet-500/15 text-violet-600 ring-violet-500/30",
-    "no-answer": "bg-amber-500/15 text-amber-700 ring-amber-500/30",
-    busy: "bg-orange-500/15 text-orange-600 ring-orange-500/30",
-    failed: "bg-rose-500/15 text-rose-600 ring-rose-500/30",
-    completed: "bg-teal-500/15 text-teal-600 ring-teal-500/30",
+    queued: "bg-white text-zinc-600 ring-white/60 dark:bg-white/10 dark:text-zinc-200 dark:ring-white/10",
+    ringing: "bg-sky-500/15 text-sky-600 ring-sky-400/40 dark:text-sky-300",
+    answered: "bg-emerald-500/15 text-emerald-600 ring-emerald-400/40 dark:text-emerald-300",
+    voicemail: "bg-violet-500/15 text-violet-600 ring-violet-400/40 dark:text-violet-300",
+    "no-answer": "bg-amber-500/15 text-amber-700 ring-amber-400/40 dark:text-amber-300",
+    busy: "bg-orange-500/15 text-orange-600 ring-orange-400/40 dark:text-orange-300",
+    failed: "bg-rose-500/15 text-rose-600 ring-rose-400/40 dark:text-rose-300",
+    completed: "bg-teal-500/15 text-teal-600 ring-teal-400/40 dark:text-teal-300",
   };
   const cls = map[value] || map.queued;
   return <span className={"inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] ring-1 "+cls}><Icon.Dot className="h-1.5 w-1.5"/>{value}</span>

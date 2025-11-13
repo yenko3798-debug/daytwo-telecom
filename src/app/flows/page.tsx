@@ -1,9 +1,10 @@
 "use client";
 
 import React, { useMemo, useRef, useState } from "react";
-import { Dialog, DialogBackdrop, DialogPanel, Switch, Tab } from "@headlessui/react";
+import { Dialog, DialogBackdrop, DialogPanel, Switch } from "@headlessui/react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Container } from "@/components/Container";
+import { PageFrame, MotionCard, ShimmerTile, ShimmerRows } from "@/components/ui/LuxuryPrimitives";
+import { usePageLoading } from "@/hooks/usePageLoading";
 
 /* ---------------- inline icons (no external deps) ---------------- */
 const Icons = {
@@ -59,19 +60,40 @@ function Field({ label, hint, children }) {
   );
 }
 
-function Card({ title, subtitle, right, children }) {
+function Card({
+  title,
+  subtitle,
+  right,
+  children,
+  loading,
+  tone,
+}: {
+  title: string;
+  subtitle?: string;
+  right?: React.ReactNode;
+  children: React.ReactNode;
+  loading?: boolean;
+  tone?: "emerald" | "violet" | "neutral";
+}) {
+  const cardTone = tone ?? "neutral";
   return (
-    <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-      className="rounded-2xl bg-white/80 p-4 shadow-sm ring-1 ring-zinc-900/10 backdrop-blur-sm dark:bg-zinc-900/70 dark:ring-white/10">
+    <MotionCard tone={cardTone} className="p-5 sm:p-6">
       <div className="mb-3 flex items-center justify-between">
         <div>
           <div className="text-sm font-semibold text-zinc-700 dark:text-zinc-200">{title}</div>
-          {subtitle ? <div className="text-xs text-zinc-500">{subtitle}</div> : null}
+          {subtitle ? <div className="text-xs text-zinc-500 dark:text-zinc-400">{subtitle}</div> : null}
         </div>
         {right}
       </div>
-      {children}
-    </motion.div>
+      {loading ? (
+        <div className="space-y-3">
+          <ShimmerTile className="h-12 rounded-xl" />
+          <ShimmerRows rows={3} />
+        </div>
+      ) : (
+        children
+      )}
+    </MotionCard>
   );
 }
 
@@ -232,16 +254,21 @@ export default function FlowBuilderPage(){
     after: { type: "tts", text: "Thanks. We will connect you shortly." },
   });
   const [openPreview, setOpenPreview] = useState(false);
+  const { loading } = usePageLoading(640);
 
   return (
-    <Container>
-      <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-6 py-8 lg:grid-cols-3">
+    <PageFrame
+      eyebrow="Flows"
+      title="Flow atelier"
+      description="Compose IVR steps, gather digits and export call flows with a luxe, reactive canvas."
+    >
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* left: vertical flow map */}
         <div className="lg:col-span-1">
-          <motion.div initial={{opacity:0,y:10}} animate={{opacity:1,y:0}} className="relative rounded-3xl bg-gradient-to-b from-zinc-900 to-zinc-800 p-6 text-zinc-100 shadow-lg ring-1 ring-white/10">
+          <motion.div initial={{opacity:0,y:10}} animate={{opacity:1,y:0}} className="relative overflow-hidden rounded-[2.5rem] bg-gradient-to-b from-zinc-900 to-zinc-800 p-6 text-zinc-100 shadow-[0_24px_50px_rgba(3,7,18,0.6)] ring-1 ring-white/10">
             <div className="mb-6 flex items-center justify-between">
               <div className="text-lg font-semibold">Call flow</div>
-              <div className="pointer-events-none absolute -inset-2 -z-10 rounded-3xl bg-gradient-to-b from-indigo-400/20 via-indigo-400/10 to-transparent"/>
+              <div className="pointer-events-none absolute -inset-2 -z-10 rounded-[2.5rem] bg-gradient-to-b from-indigo-400/20 via-indigo-400/10 to-transparent"/>
             </div>
 
             <div className="space-y-4">
@@ -259,22 +286,22 @@ export default function FlowBuilderPage(){
 
         {/* center: editors */}
         <div className="lg:col-span-1 space-y-4">
-          <Card title="Step 1 — Play / TTS" subtitle="Greeting / IVR intro">
+          <Card title="Step 1 — Play / TTS" subtitle="Greeting / IVR intro" loading={loading} tone="emerald">
             <AudioEditor value={flow.intro} onChange={(v)=>setFlow({...flow, intro:v})}/>
           </Card>
 
-          <Card title="Step 2 — Gather DTMF" subtitle="Capture digit or configure menu">
+          <Card title="Step 2 — Gather DTMF" subtitle="Capture digit or configure menu" loading={loading} tone="violet">
             <DtmfEditor mapping={flow.dtmf.map} onChange={(m)=>setFlow({...flow, dtmf:{...flow.dtmf, map:m}})}/>
           </Card>
 
-          <Card title="Step 3 — Play / TTS" subtitle="After user presses a key">
+          <Card title="Step 3 — Play / TTS" subtitle="After user presses a key" loading={loading}>
             <AudioEditor value={flow.after} onChange={(v)=>setFlow({...flow, after:v})}/>
           </Card>
         </div>
 
         {/* right: actions & preview */}
         <div className="lg:col-span-1">
-          <motion.div initial={{opacity:0,y:10}} animate={{opacity:1,y:0}} className="rounded-3xl bg-zinc-900 p-6 text-zinc-100 shadow-lg ring-1 ring-white/10">
+          <MotionCard tone="neutral" className="p-6">
             <div className="mb-4 text-sm opacity-80">Actions</div>
             <div className="grid gap-3">
               <button onClick={()=>setOpenPreview(true)} className="rounded-xl bg-white/10 px-4 py-3 text-left ring-1 ring-inset ring-white/20 transition hover:bg-white/20">
@@ -307,11 +334,11 @@ export default function FlowBuilderPage(){
                 <div className="mt-1 text-xs opacity-70">POST the DTMF result to your server.</div>
               </button>
             </div>
-          </motion.div>
+          </MotionCard>
         </div>
       </div>
 
       <PreviewModal open={openPreview} onClose={()=>setOpenPreview(false)} flow={flow}/>
-    </Container>
+    </PageFrame>
   );
 }

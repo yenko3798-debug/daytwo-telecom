@@ -1,288 +1,209 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
-import Image from 'next/image'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useTheme } from 'next-themes'
 import {
   Popover,
-  PopoverButton,
   PopoverBackdrop,
+  PopoverButton,
   PopoverPanel,
 } from '@headlessui/react'
+import { LayoutGroup, motion } from 'framer-motion'
 import clsx from 'clsx'
 
-import { Container } from '@/components/Container'
-import avatarImage from '@/images/avatar.jpg'
+const navItems = [
+  { href: '/start', label: 'Start' },
+  { href: '/dashboard', label: 'Dashboard' },
+  { href: '/campaigns', label: 'Campaigns' },
+  { href: '/flows', label: 'Flows' },
+  { href: '/topup', label: 'Top Up' },
+  { href: '/status', label: 'Status' },
+  { href: '/pricing', label: 'Pricing' },
+]
 
-function CloseIcon(props) {
+function BrandMark() {
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
-      <path
-        d="m17.25 6.75-10.5 10.5M6.75 6.75l10.5 10.5"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}
-
-function ChevronDownIcon(props) {
-  return (
-    <svg viewBox="0 0 8 6" aria-hidden="true" {...props}>
-      <path
-        d="M1.75 1.75 4 4.25l2.25-2.5"
-        fill="none"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}
-
-function SunIcon(props) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      {...props}
+    <Link
+      href="/"
+      className="group relative flex items-center gap-3 rounded-full pr-3"
     >
-      <path d="M8 12.25A4.25 4.25 0 0 1 12.25 8v0a4.25 4.25 0 0 1 4.25 4.25v0a4.25 4.25 0 0 1-4.25 4.25v0A4.25 4.25 0 0 1 8 12.25v0Z" />
-      <path
-        d="M12.25 3v1.5M21.5 12.25H20M18.791 18.791l-1.06-1.06M18.791 5.709l-1.06 1.06M12.25 20v1.5M4.5 12.25H3M6.77 6.77 5.709 5.709M6.77 17.73l-1.061 1.061"
-        fill="none"
-      />
-    </svg>
+      <span className="grid h-11 w-11 place-items-center rounded-[1.25rem] bg-gradient-to-br from-emerald-400 via-emerald-500 to-sky-500 text-lg font-semibold text-white shadow-[0_20px_36px_rgba(16,185,129,0.4)] transition duration-300 group-hover:-translate-y-0.5 group-hover:shadow-[0_26px_48px_rgba(16,185,129,0.5)]">
+        Y
+      </span>
+      <span className="flex flex-col">
+        <span className="text-xs font-semibold uppercase tracking-[0.32em] text-zinc-500 dark:text-zinc-400">
+          Yenko
+        </span>
+        <span className="text-base font-semibold text-zinc-900 dark:text-white">
+          Foe Telecom
+        </span>
+      </span>
+    </Link>
   )
 }
 
-function MoonIcon(props) {
+function ThemeToggle({ className }) {
+  const { resolvedTheme, setTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => {
+    setMounted(true)
+  }, [])
+  const nextTheme = resolvedTheme === 'dark' ? 'light' : 'dark'
+
   return (
-    <svg viewBox="0 0 24 24" aria-hidden="true" {...props}>
-      <path
-        d="M17.25 16.22a6.937 6.937 0 0 1-9.47-9.47 7.451 7.451 0 1 0 9.47 9.47ZM12.75 7C17 7 17 2.75 17 2.75S17 7 21.25 7C17 7 17 11.25 17 11.25S17 7 12.75 7Z"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
+    <button
+      type='button'
+      onClick={() => setTheme(nextTheme)}
+      aria-label={mounted ? `Switch to ${nextTheme} theme` : 'Toggle theme'}
+      className={clsx(
+        'relative inline-flex h-10 w-10 items-center justify-center rounded-2xl bg-white/80 text-zinc-800 shadow-sm ring-1 ring-zinc-900/10 transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_20px_34px_rgba(148,163,184,0.28)] dark:bg-white/10 dark:text-zinc-100 dark:ring-white/10',
+        className,
+      )}
+    >
+      <span className="absolute inset-0 rounded-2xl bg-gradient-to-br from-white via-white to-transparent opacity-70 dark:hidden" />
+      <span className="absolute inset-0 hidden rounded-2xl bg-gradient-to-br from-white/15 via-white/5 to-transparent opacity-80 dark:block" />
+      <span className="relative z-10 flex h-5 w-5 items-center justify-center">
+        {mounted && resolvedTheme === 'dark' ? <SunIcon /> : <MoonIcon />}
+      </span>
+    </button>
   )
 }
 
-function MobileNavItem({ href, children }) {
+function DesktopNav({ pathname }) {
   return (
-    <li>
-      <PopoverButton as={Link} href={href} className="block py-2">
-        {children}
-      </PopoverButton>
-    </li>
+    <LayoutGroup>
+      <nav className="hidden items-center gap-1 rounded-full bg-white/50 p-1 shadow-inner ring-1 ring-zinc-900/10 backdrop-blur-md dark:bg-white/10 dark:ring-white/10 md:flex">
+        {navItems.map((item) => {
+          const active =
+            pathname === item.href ||
+            (item.href !== '/' && pathname.startsWith(item.href))
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={clsx(
+                'relative inline-flex items-center rounded-full px-4 py-2 text-sm font-medium transition-colors duration-200',
+                active
+                  ? 'text-zinc-900 dark:text-white'
+                  : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-white',
+              )}
+            >
+              {active && (
+                <motion.span
+                  layoutId="nav-active"
+                  transition={{ type: 'spring', stiffness: 420, damping: 38 }}
+                  className="absolute inset-0 rounded-full bg-white/90 shadow-lg ring-1 ring-zinc-900/10 dark:bg-white/10 dark:ring-white/10"
+                />
+              )}
+              <span className="relative z-10">{item.label}</span>
+            </Link>
+          )
+        })}
+      </nav>
+    </LayoutGroup>
   )
 }
 
-function MobileNavigation(props) {
+function MobileNav({ pathname }) {
   return (
-    <Popover {...props}>
-      <PopoverButton className="group flex items-center rounded-full bg-white/90 px-4 py-2 text-sm font-medium text-zinc-800 shadow-lg ring-1 shadow-zinc-800/5 ring-zinc-900/5 backdrop-blur-sm dark:bg-zinc-800/90 dark:text-zinc-200 dark:ring-white/10 dark:hover:ring-white/20">
+    <Popover className="md:hidden">
+      <PopoverButton className="inline-flex items-center rounded-full bg-white/70 px-3 py-2 text-sm font-semibold text-zinc-800 shadow-sm ring-1 ring-zinc-900/10 backdrop-blur transition duration-200 hover:bg-white dark:bg-white/10 dark:text-zinc-100 dark:ring-white/10">
         Menu
-        <ChevronDownIcon className="ml-3 h-auto w-2 stroke-zinc-500 group-hover:stroke-zinc-700 dark:group-hover:stroke-zinc-400" />
       </PopoverButton>
-      <PopoverBackdrop
-        transition
-        className="fixed inset-0 z-50 bg-zinc-800/40 backdrop-blur-xs duration-150 data-closed:opacity-0 data-enter:ease-out data-leave:ease-in dark:bg-black/80"
-      />
-      <PopoverPanel
-        focus
-        transition
-        className="fixed inset-x-4 top-8 z-50 origin-top rounded-3xl bg-white p-8 ring-1 ring-zinc-900/5 duration-150 data-closed:scale-95 data-closed:opacity-0 data-enter:ease-out data-leave:ease-in dark:bg-zinc-900 dark:ring-zinc-800"
-      >
-
-
+      <PopoverBackdrop className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm duration-200 data-closed:opacity-0" />
+      <PopoverPanel className="fixed inset-x-4 top-28 z-50 origin-top rounded-3xl bg-[#f8f6f1]/95 p-4 shadow-2xl ring-1 ring-zinc-900/10 transition duration-200 data-closed:-translate-y-3 data-closed:opacity-0 dark:bg-[#0b0d13]/95 dark:ring-white/10">
+        <div className="flex flex-col gap-2">
+          {navItems.map((item) => {
+            const active =
+              pathname === item.href ||
+              (item.href !== '/' && pathname.startsWith(item.href))
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={clsx(
+                  'flex items-center justify-between rounded-2xl px-4 py-3 text-base font-semibold transition',
+                  active
+                    ? 'bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-900/10 dark:bg-white/10 dark:text-white dark:ring-white/10'
+                    : 'bg-white/55 text-zinc-600 hover:bg-white dark:bg-white/5 dark:text-zinc-300 dark:hover:bg-white/10',
+                )}
+              >
+                <span>{item.label}</span>
+                {active && (
+                  <span className="text-xs font-medium uppercase tracking-wide text-emerald-500">
+                    Active
+                  </span>
+                )}
+              </Link>
+            )
+          })}
+          <Link
+            href="/auth/login"
+            className="mt-2 inline-flex items-center justify-center rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-sky-500 px-4 py-3 text-sm font-semibold text-white shadow-[0_18px_32px_rgba(13,148,136,0.38)] transition hover:shadow-[0_24px_40px_rgba(13,148,136,0.46)]"
+          >
+            Account
+          </Link>
+        </div>
       </PopoverPanel>
     </Popover>
   )
 }
 
-function NavItem({ href, children }) {
-  let isActive = usePathname() === href
-
+function SunIcon() {
   return (
-    <li>
-      <Link
-        href={href}
-        className={clsx(
-          'relative block px-3 py-2 transition',
-          isActive
-            ? 'text-emerald-400 dark:text-emerald-300'
-            : 'hover:text-emerald-400 dark:hover:text-emerald-300',
-        )}
-      >
-        {children}
-        {isActive && (
-          <span className="absolute inset-x-1 -bottom-px h-px bg-linear-to-r from-emerald-400/0 via-emerald-400/40 to-emerald-400/0 dark:from-emerald-300/0 dark:via-emerald-300/40 dark:to-emerald-300/0" />
-        )}
-      </Link>
-    </li>
-  )
-}
-
-
-
-
-function ThemeToggle() {
-  let { resolvedTheme, setTheme } = useTheme()
-  let otherTheme = resolvedTheme === 'dark' ? 'light' : 'dark'
-  let [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  return (
-    <button
-      type="button"
-      aria-label={mounted ? `Switch to ${otherTheme} theme` : 'Toggle theme'}
-      className="group rounded-full bg-white/90 px-3 py-2 shadow-lg ring-1 shadow-zinc-800/5 ring-zinc-900/5 backdrop-blur-sm transition dark:bg-zinc-800/90 dark:ring-white/10 dark:hover:ring-white/20"
-      onClick={() => setTheme(otherTheme)}
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-5 w-5"
     >
-      <SunIcon className="h-6 w-6 fill-zinc-100 stroke-zinc-500 transition group-hover:fill-zinc-200 group-hover:stroke-zinc-700 dark:hidden [@media(prefers-color-scheme:dark)]:fill-teal-50 [@media(prefers-color-scheme:dark)]:stroke-teal-500 [@media(prefers-color-scheme:dark)]:group-hover:fill-teal-50 [@media(prefers-color-scheme:dark)]:group-hover:stroke-teal-600" />
-      <MoonIcon className="hidden h-6 w-6 fill-zinc-700 stroke-zinc-500 transition not-[@media_(prefers-color-scheme:dark)]:fill-teal-400/10 not-[@media_(prefers-color-scheme:dark)]:stroke-teal-500 dark:block [@media(prefers-color-scheme:dark)]:group-hover:stroke-zinc-400" />
-    </button>
+      <path d="M12 17a5 5 0 1 0-5-5 5 5 0 0 0 5 5Z" />
+      <path d="M12 3v1.5M12 19.5V21M4.5 12H3M21 12h-1.5M5.636 5.636l1.06 1.06M17.304 17.304l1.06 1.06M17.304 6.696l1.06-1.06M5.636 18.364l1.06-1.06" />
+    </svg>
   )
 }
 
-function clamp(number, a, b) {
-  let min = Math.min(a, b)
-  let max = Math.max(a, b)
-  return Math.min(Math.max(number, min), max)
+function MoonIcon() {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="h-5 w-5"
+    >
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79Z" />
+    </svg>
+  )
 }
-
-
-
 
 export function Header() {
-  let isHomePage = usePathname() === '/'
-
-  let headerRef = useRef(null)
-  let avatarRef = useRef(null)
-  let isInitial = useRef(true)
-
-  useEffect(() => {
-    let downDelay = avatarRef.current?.offsetTop ?? 0
-    let upDelay = 64
-
-    function setProperty(property, value) {
-      document.documentElement.style.setProperty(property, value)
-    }
-
-    function removeProperty(property) {
-      document.documentElement.style.removeProperty(property)
-    }
-
-    function updateHeaderStyles() {
-      if (!headerRef.current) {
-        return
-      }
-
-      let { top, height } = headerRef.current.getBoundingClientRect()
-      let scrollY = clamp(
-        window.scrollY,
-        0,
-        document.body.scrollHeight - window.innerHeight,
-      )
-
-      if (isInitial.current) {
-        setProperty('--header-position', 'sticky')
-      }
-
-      setProperty('--content-offset', `${downDelay}px`)
-
-      if (isInitial.current || scrollY < downDelay) {
-        setProperty('--header-height', `${downDelay + height}px`)
-        setProperty('--header-mb', `${-downDelay}px`)
-      } else if (top + height < -upDelay) {
-        let offset = Math.max(height, scrollY - upDelay)
-        setProperty('--header-height', `${offset}px`)
-        setProperty('--header-mb', `${height - offset}px`)
-      } else if (top === 0) {
-        setProperty('--header-height', `${scrollY + height}px`)
-        setProperty('--header-mb', `${-scrollY}px`)
-      }
-
-      if (top === 0 && scrollY > 0 && scrollY >= downDelay) {
-        setProperty('--header-inner-position', 'fixed')
-        removeProperty('--header-top')
-        removeProperty('--avatar-top')
-      } else {
-        removeProperty('--header-inner-position')
-        setProperty('--header-top', '0px')
-        setProperty('--avatar-top', '0px')
-      }
-    }
-
-    function updateAvatarStyles() {
-      if (!isHomePage) {
-        return
-      }
-
-      let fromScale = 1
-      let toScale = 36 / 64
-      let fromX = 0
-      let toX = 2 / 16
-
-      let scrollY = downDelay - window.scrollY
-
-      let scale = (scrollY * (fromScale - toScale)) / downDelay + toScale
-      scale = clamp(scale, fromScale, toScale)
-
-      let x = (scrollY * (fromX - toX)) / downDelay + toX
-      x = clamp(x, fromX, toX)
-
-      setProperty(
-        '--avatar-image-transform',
-        `translate3d(${x}rem, 0, 0) scale(${scale})`,
-      )
-
-      let borderScale = 1 / (toScale / scale)
-      let borderX = (-toX + x) * borderScale
-      let borderTransform = `translate3d(${borderX}rem, 0, 0) scale(${borderScale})`
-
-      setProperty('--avatar-border-transform', borderTransform)
-      setProperty('--avatar-border-opacity', scale === toScale ? '1' : '0')
-    }
-
-    function updateStyles() {
-      updateHeaderStyles()
-      updateAvatarStyles()
-      isInitial.current = false
-    }
-
-    updateStyles()
-    window.addEventListener('scroll', updateStyles, { passive: true })
-    window.addEventListener('resize', updateStyles)
-
-    return () => {
-      window.removeEventListener('scroll', updateStyles)
-      window.removeEventListener('resize', updateStyles)
-    }
-  }, [isHomePage])
+  const pathname = usePathname()
 
   return (
-    <>
-
-      {isHomePage && (
-        <div
-          className="flex-none"
-          style={{ height: 'var(--content-offset)' }}
-        />
-      )}
-    </>
+    <header className="relative z-20 px-4 pt-6 sm:px-6 lg:px-8">
+      <div className="absolute inset-x-0 top-0 z-[-1] h-32 bg-gradient-to-b from-[#f4f2ed] via-[#f4f2ed]/75 to-transparent dark:from-[#05070c] dark:via-[#05070c]/75" />
+      <div className="mx-auto flex w-full max-w-7xl items-center justify-between rounded-[2.75rem] bg-white/70 px-4 py-3 shadow-[0_24px_60px_rgba(15,23,42,0.14)] ring-1 ring-zinc-900/10 backdrop-blur-xl dark:bg-[#0c0f16]/80 dark:ring-white/10 md:px-6 md:py-4">
+        <BrandMark />
+        <DesktopNav pathname={pathname} />
+        <div className="flex items-center gap-2 md:gap-3">
+          <ThemeToggle />
+          <Link
+            href="/auth/login"
+            className="hidden items-center rounded-full bg-gradient-to-r from-emerald-500 via-teal-500 to-sky-500 px-4 py-2 text-sm font-semibold text-white shadow-[0_16px_30px_rgba(13,148,136,0.35)] transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_24px_38px_rgba(13,148,136,0.45)] md:inline-flex"
+          >
+            Account
+          </Link>
+          <MobileNav pathname={pathname} />
+        </div>
+      </div>
+    </header>
   )
 }

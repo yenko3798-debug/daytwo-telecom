@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Dialog, DialogBackdrop, DialogPanel, Switch } from "@headlessui/react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Container } from "@/components/Container";
+import { PageFrame } from "@/components/ui/LuxuryPrimitives";
 
 /* ---------------- inline icons ---------------- */
 const Icons = {
@@ -125,9 +125,13 @@ export default function CampaignsPage(){
   function stop(){ if(timerRef.current){ clearInterval(timerRef.current); timerRef.current=null; } setRunning(false); setProgress(100); push("Completed"); }
 
   return (
-    <Container>
+    <PageFrame
+      eyebrow="Campaigns"
+      title="Campaign scratchpad"
+      description="Paste raw leads, scrub numbers, generate scripts and preview call flows with live microinteractions."
+    >
       <Toasts />
-      <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-6 py-8 lg:grid-cols-3">
+      <div className="grid gap-6 lg:grid-cols-3">
         {/* LEFT: campaign form */}
         <div className="lg:col-span-2">
           <motion.div initial={{opacity:0,y:10}} animate={{opacity:1,y:0}} className="rounded-3xl bg-white/80 p-6 shadow-lg ring-1 ring-zinc-900/10 backdrop-blur-sm dark:bg-zinc-900/70 dark:ring-white/10">
@@ -227,6 +231,6 @@ export default function CampaignsPage(){
           </motion.div>
         </div>
       </div>
-    </Container>
+    </PageFrame>
   );
 }
