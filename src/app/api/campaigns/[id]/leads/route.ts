@@ -27,14 +27,15 @@ function ensureAdmin(role: string | undefined) {
 
 export async function GET(
   req: Request,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await context.params;
   const session = await getSession();
   if (!session) return unauthorized();
   const isAdmin = ensureAdmin(session.role);
 
   const campaign = await prisma.campaign.findUnique({
-    where: { id: params.id },
+    where: { id },
     select: { id: true, userId: true },
   });
   if (!campaign) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -47,7 +48,7 @@ export async function GET(
   const cursor = url.searchParams.get("cursor");
   const status = url.searchParams.get("status");
 
-  const where: any = { campaignId: params.id };
+  const where: any = { campaignId: id };
   if (status && status in LeadStatus) {
     where.status = status.toUpperCase();
   }
@@ -75,8 +76,9 @@ export async function GET(
 
 export async function POST(
   req: Request,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
+  const { id } = await context.params;
   const session = await getSession();
   if (!session) return unauthorized();
   const isAdmin = ensureAdmin(session.role);
@@ -84,7 +86,7 @@ export async function POST(
   try {
     const body = createSchema.parse(await req.json());
     const campaign = await prisma.campaign.findUnique({
-      where: { id: params.id },
+      where: { id },
       select: { id: true, userId: true },
     });
     if (!campaign) {
@@ -98,7 +100,7 @@ export async function POST(
       const normalized =
         normalizePhoneNumber(lead.phone, (body.country as any) ?? "US") ?? lead.phone;
       return {
-        campaignId: params.id,
+        campaignId: id,
         phoneNumber: lead.phone,
         normalizedNumber: normalized,
         status: LeadStatus.PENDING,
@@ -114,7 +116,7 @@ export async function POST(
 
       if (created.count > 0) {
         await tx.campaign.update({
-          where: { id: params.id },
+          where: { id },
           data: { totalLeads: { increment: created.count } },
         });
       }
