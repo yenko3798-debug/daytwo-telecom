@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { FlowDefinitionSchema, summarizeFlow } from "@/lib/flows";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 
 const updateSchema = z.object({
   name: z.string().min(2).max(100).optional(),
   description: z.string().max(200).optional(),
-  definition: z.any().optional(),
+  definition: FlowDefinitionSchema.optional(),
 });
 
 function unauthorized() {
@@ -56,12 +57,22 @@ export async function PATCH(
 
   try {
     const body = updateSchema.parse(await req.json());
+    const definition = body.definition ?? FlowDefinitionSchema.parse(flow.definition);
+    const summary = summarizeFlow(definition);
+    const baseMetadata =
+      flow.metadata && typeof flow.metadata === "object" && !Array.isArray(flow.metadata)
+        ? (flow.metadata as Record<string, any>)
+        : {};
     const updated = await prisma.callFlow.update({
       where: { id: params.id },
       data: {
         name: body.name ?? flow.name,
         description: body.description ?? flow.description,
-        definition: body.definition ?? flow.definition,
+        definition,
+        metadata: {
+          ...baseMetadata,
+          summary,
+        },
       },
     });
     return NextResponse.json({ flow: updated });
