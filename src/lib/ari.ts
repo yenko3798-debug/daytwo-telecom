@@ -7,6 +7,7 @@ type AriConfig = {
   application?: string;
   context?: string;
   extension?: string;
+  priority?: number;
 };
 
 type OriginateOptions = {
@@ -33,13 +34,26 @@ function readConfig(): AriConfig {
   if (!baseUrl || !username || !password) {
     throw new Error("ARI configuration is incomplete");
   }
+  const application = process.env.ARI_APPLICATION || undefined;
+  const context = process.env.ARI_CONTEXT || undefined;
+  const extension = process.env.ARI_EXTENSION || undefined;
+  if (!application && (!context || !extension)) {
+    throw new Error("ARI_APPLICATION or both ARI_CONTEXT and ARI_EXTENSION must be set");
+  }
+  if ((context && !extension) || (!context && extension)) {
+    throw new Error("Both ARI_CONTEXT and ARI_EXTENSION must be provided together");
+  }
+  const priorityRaw = process.env.ARI_PRIORITY;
+  const priorityValue = priorityRaw ? Number.parseInt(priorityRaw, 10) : undefined;
+  const priority = Number.isFinite(priorityValue) && priorityValue && priorityValue > 0 ? priorityValue : undefined;
   return {
     baseUrl,
     username,
     password,
-    application: process.env.ARI_APPLICATION || undefined,
-    context: process.env.ARI_CONTEXT || undefined,
-    extension: process.env.ARI_EXTENSION || undefined,
+    application,
+    context,
+    extension,
+    priority,
   };
 }
 
@@ -63,11 +77,10 @@ export async function originateCall(opts: OriginateOptions): Promise<OriginateRe
   if (config.application) {
     params.set("app", config.application);
   }
-  if (config.context) {
+  if (config.context && config.extension) {
     params.set("context", config.context);
-  }
-  if (config.extension) {
     params.set("extension", config.extension);
+    params.set("priority", String(config.priority ?? 1));
   }
   if (opts.variables) {
     for (const [key, value] of Object.entries(opts.variables)) {
