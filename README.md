@@ -48,6 +48,65 @@ Finally, open [http://localhost:3000](http://localhost:3000) in your browser to 
 
 You can start editing this template by modifying the files in the `/src` folder. The site will auto-update as you edit these files.
 
+## Asterisk ARI integration guide
+
+Use the checklist below to connect the outbound dialer to an Asterisk instance via ARI. The application assumes a modern Asterisk build (18+) with ARI, PJSIP and Stasis enabled.
+
+1. **Enable ARI in Asterisk**  
+   - In `ari.conf`, set `enabled = yes`, `pretty = yes`, `allowed_origins = *` (or lock to your domains).  
+   - Add a user block (e.g. `[lux]`) with `type = user`, `read_only = no`, `password = <strong-password>`.
+
+2. **Expose ARI over HTTPS**  
+   - Proxy `/ari` through nginx or caddy with TLS.  
+   - Note the base URL such as `https://pbx.example.com/ari`.
+
+3. **Create a Stasis application**  
+   - In `ari.conf`, ensure `app = spotlight` matches your `ARI_APPLICATION`.  
+   - In `extensions.conf` (or your PJSIP dialplan), route outbound calls into Stasis:  
+     ```
+     [outbound]
+     exten => _X.,1,NoOp(Outbound via Spotlight)
+       same => n,Stasis(spotlight,${ARG1},${ARG2},${ARG3})
+     ```
+     The arguments will receive `campaign_id`, `lead_id`, `session_id`, `flow_id`, `flow_version` respectively.
+
+4. **Configure SIP trunks**  
+   - Create PJSIP endpoints named to match the `outboundUri` or `domain` fields you enter in the admin UI.  
+   - If authentication is required, store credentials in the route metadata and configure PJSIP registration on the PBX.
+
+5. **Set backend environment variables**  
+   Add the following to `.env.local` (or your deployment secrets):
+   ```
+   ARI_BASE_URL=https://pbx.example.com/ari
+   ARI_USERNAME=lux
+   ARI_PASSWORD=replace-with-ari-password
+   ARI_APPLICATION=spotlight
+   ARI_CONTEXT=outbound
+   ARI_EXTENSION=s
+   ARI_INTERNAL_TOKEN=replace-with-long-random-string
+   ```
+   `ARI_INTERNAL_TOKEN` secures the internal endpoints the PBX calls when it needs call-flow definitions.
+
+6. **Webhook endpoints**  
+   - `POST /api/webhooks/ari` receives status updates (`call.answered`, `call.completed`, etc.) from your middleware or dialplan. Pass `sessionId`, optional `dtmf`, `durationSeconds`, `recordingUrl`, `costCents`.  
+   - `GET /api/ari/sessions/:sessionId` (requires header `x-ari-token`) returns the call session, campaign metadata, and the flow definition snapshot for the PBX to execute.
+
+7. **Runtime expectations**  
+   - Every campaign reserves $0.10 per lead (change via `RATE_PER_1000_LEADS_CENTS` in `lib/flows.ts`) when the session is created. Ensure user balances in the admin panel are topped up before launching.  
+   - Call sessions are throttled according to `callsPerMinute` and `maxConcurrentCalls`. Adjust these in the start page or admin dashboard to match your trunk capacity.
+
+8. **PBX application logic**  
+   - Inside your ARI/Stasis handler, fetch the session payload from `GET /api/ari/sessions/:id`, execute the steps described in the `flow.definition`, and report final status back to `POST /api/webhooks/ari`.  
+   - The flow definition contains ordered nodes (`play`, `gather`, `dial`, `pause`, `hangup`). Respect `next` and `defaultNext` branches to reproduce the IVR exactly as designed in the UI.
+
+9. **Testing checklist**  
+   - Create a SIP route in the admin panel and ensure dialing the trunk from the PBX succeeds.  
+   - Build a flow in the call-flow atelier, export JSON if needed for manual review.  
+   - Launch a small campaign from `/start`, upload a few leads, and verify calls reach the callee with the configured caller ID and prompts.  
+   - Monitor the admin dashboard for real-time session updates and balance debits.
+
+Following the steps above ensures the web application, payment ledger, and PBX remain in sync and every call uses the exact flow created in the UI.
+
 ## License
 
 This site template is a commercial product and is licensed under the [Tailwind Plus license](https://tailwindcss.com/plus/license).

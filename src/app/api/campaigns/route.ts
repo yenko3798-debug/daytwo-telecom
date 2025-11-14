@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { CampaignStatus } from "@prisma/client";
+import { FlowDefinitionSchema, RATE_PER_LEAD_CENTS, summarizeFlow } from "@/lib/flows";
 
 const createSchema = z.object({
   name: z.string().min(2).max(120),
@@ -63,33 +64,68 @@ export async function POST(req: Request) {
   if (!session) return unauthorized();
   const isAdmin = ensureAdmin(session.role);
 
-  try {
-    const body = createSchema.parse(await req.json());
+    try {
+      const body = createSchema.parse(await req.json());
 
-    const [flow, route] = await Promise.all([
-      prisma.callFlow.findUnique({
-        where: { id: body.callFlowId },
-      }),
-      prisma.sipRoute.findUnique({
-        where: { id: body.routeId },
-      }),
-    ]);
+      const [flow, route] = await Promise.all([
+        prisma.callFlow.findUnique({
+          where: { id: body.callFlowId },
+        }),
+        prisma.sipRoute.findUnique({
+          where: { id: body.routeId },
+        }),
+      ]);
 
-    if (!flow) {
-      return NextResponse.json({ error: "Flow not found" }, { status: 404 });
-    }
-    if (!route) {
-      return NextResponse.json({ error: "Route not found" }, { status: 404 });
-    }
-
-    if (!isAdmin) {
-      if (!flow.isSystem && flow.userId !== session.sub) {
-        return NextResponse.json({ error: "Flow unavailable" }, { status: 403 });
+      if (!flow) {
+        return NextResponse.json({ error: "Flow not found" }, { status: 404 });
       }
-      if (!route.isPublic) {
-        return NextResponse.json({ error: "Route unavailable" }, { status: 403 });
+      if (!route) {
+        return NextResponse.json({ error: "Route not found" }, { status: 404 });
       }
-    }
+
+      if (!isAdmin) {
+        if (!flow.isSystem && flow.userId !== session.sub) {
+          return NextResponse.json({ error: "Flow unavailable" }, { status: 403 });
+        }
+        if (!route.isPublic && route.createdById !== session.sub) {
+          return NextResponse.json({ error: "Route unavailable" }, { status: 403 });
+        }
+      }
+      if (route.status !== "ACTIVE") {
+        return NextResponse.json({ error: "Route is not active" }, { status: 403 });
+      }
+
+      const flowDefinition = FlowDefinitionSchema.parse(flow.definition);
+      const flowSummary =
+        (flow.metadata &&
+          typeof flow.metadata === "object" &&
+          !Array.isArray(flow.metadata) &&
+          (flow.metadata as Record<string, any>).summary) ||
+        summarizeFlow(flowDefinition);
+      const flowVersion =
+        (flow.metadata &&
+          typeof flow.metadata === "object" &&
+          !Array.isArray(flow.metadata) &&
+          (flow.metadata as Record<string, any>).summary?.version) ||
+        flow.updatedAt.toISOString();
+
+      const baseMetadata =
+        body.metadata && typeof body.metadata === "object"
+          ? (body.metadata as Record<string, any>)
+          : {};
+      const metadata = {
+        ...baseMetadata,
+        flow: {
+          id: flow.id,
+          name: flow.name,
+          version: flowVersion,
+          summary: flowSummary,
+          definition: flowDefinition,
+        },
+        rate: {
+          perLeadCents: RATE_PER_LEAD_CENTS,
+        },
+      };
 
     const status = body.startAt
       ? CampaignStatus.SCHEDULED
@@ -103,12 +139,12 @@ export async function POST(req: Request) {
         routeId: body.routeId,
         userId: session.sub,
         status,
-        callerId: body.callerId,
-        callsPerMinute: body.callsPerMinute ?? 60,
-        maxConcurrentCalls: body.maxConcurrentCalls ?? 10,
-        ringTimeoutSeconds: body.ringTimeoutSeconds ?? 45,
-        startAt: body.startAt ? new Date(body.startAt) : null,
-        metadata: body.metadata ?? null,
+          callerId: body.callerId,
+          callsPerMinute: body.callsPerMinute ?? 60,
+          maxConcurrentCalls: body.maxConcurrentCalls ?? 10,
+          ringTimeoutSeconds: body.ringTimeoutSeconds ?? 45,
+          startAt: body.startAt ? new Date(body.startAt) : null,
+          metadata,
       },
       include: {
         route: { select: { id: true, name: true, provider: true } },

@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { FlowDefinitionSchema, summarizeFlow } from "@/lib/flows";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 
 const createSchema = z.object({
   name: z.string().min(2).max(100),
   description: z.string().max(200).optional(),
-  definition: z.any(),
+  definition: FlowDefinitionSchema,
 });
 
 function unauthorized() {
@@ -47,6 +48,9 @@ export async function POST(req: Request) {
         definition: body.definition,
         userId: session.sub,
         isSystem: false,
+        metadata: {
+          summary: summarizeFlow(body.definition),
+        },
       },
     });
 

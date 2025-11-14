@@ -7,6 +7,8 @@ const updateSchema = z.object({
   name: z.string().min(2).max(80).optional(),
   provider: z.string().min(2).max(120).optional(),
   domain: z.string().min(2).max(200).optional(),
+  authUsername: z.string().min(1).max(80).nullable().optional(),
+  authPassword: z.string().min(1).max(120).nullable().optional(),
   outboundUri: z.string().min(2).max(256).nullable().optional(),
   trunkPrefix: z.string().max(32).nullable().optional(),
   callerIdFormat: z.string().max(64).nullable().optional(),
@@ -42,6 +44,8 @@ export async function PATCH(
     if ("outboundUri" in body) data.outboundUri = body.outboundUri ?? null;
     if ("trunkPrefix" in body) data.trunkPrefix = body.trunkPrefix ?? null;
     if ("callerIdFormat" in body) data.callerIdFormat = body.callerIdFormat ?? null;
+    if ("authUsername" in body) data.authUsername = body.authUsername ?? null;
+    if ("authPassword" in body) data.authPassword = body.authPassword ?? null;
     if ("concurrencyLimit" in body) data.concurrencyLimit = body.concurrencyLimit ?? null;
     if ("costPerMinuteCents" in body) data.costPerMinuteCents = body.costPerMinuteCents ?? null;
     if ("status" in body) {
