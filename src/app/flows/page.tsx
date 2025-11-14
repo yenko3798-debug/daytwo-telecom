@@ -307,27 +307,60 @@ export default function FlowBuilderPage() {
         metadata: flow.metadata ?? null,
       }));
       setFlows(mapped);
-      if (mapped.length && !draft) {
-        const first = mapped[0];
-        setDraft({
-          id: first.id,
-          isNew: false,
-          isSystem: first.isSystem,
-          name: first.name,
-          description: first.description ?? "",
-          definition: cloneDefinition(first.definition),
+      setDraft((current) => {
+        if (mapped.length === 0) {
+          return current?.isNew ? current : null;
+        }
+        if (!current) {
+          const first = mapped[0];
+          return {
+            id: first.id,
+            isNew: false,
+            isSystem: first.isSystem,
+            name: first.name,
+            description: first.description ?? "",
+            definition: cloneDefinition(first.definition),
+            dirty: false,
+            saving: false,
+          };
+        }
+        if (current.isNew) {
+          return current;
+        }
+        const active = current.id ? mapped.find((flow) => flow.id === current.id) : null;
+        if (!active) {
+          const first = mapped[0];
+          return {
+            id: first.id,
+            isNew: false,
+            isSystem: first.isSystem,
+            name: first.name,
+            description: first.description ?? "",
+            definition: cloneDefinition(first.definition),
+            dirty: false,
+            saving: false,
+          };
+        }
+        if (current.dirty) {
+          return { ...current, isSystem: active.isSystem };
+        }
+        return {
+          ...current,
+          id: active.id,
+          isSystem: active.isSystem,
+          name: active.name,
+          description: active.description ?? "",
+          definition: cloneDefinition(active.definition),
           dirty: false,
           saving: false,
-        });
-      } else if (!mapped.length) {
-        setDraft(null);
-      }
+        };
+      });
     } catch (error: any) {
       push(error?.message ?? "Unable to load flows", "error");
     } finally {
       setLoading(false);
     }
-  }, [draft, push]);
+  }, [push]);
 
   useEffect(() => {
     loadFlows();
