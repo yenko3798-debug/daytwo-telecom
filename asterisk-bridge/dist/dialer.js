@@ -10,10 +10,24 @@ function metadataTemplate(route) {
     }
     return undefined;
 }
+function renderTemplate(template, dialString) {
+    if (!template)
+        return null;
+    const replaced = template.includes("{number}") ? template.replaceAll("{number}", dialString) : template;
+    const normalized = replaced.trim();
+    if (!normalized)
+        return null;
+    const looksLikeChannel = /^[A-Za-z0-9]+\/.+/.test(normalized);
+    const looksLikeUri = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(normalized) || normalized.includes("@");
+    if (looksLikeChannel || looksLikeUri) {
+        return normalized;
+    }
+    return null;
+}
 function buildEndpoint(route, dialString) {
-    const template = metadataTemplate(route) ?? route.outboundUri ?? null;
+    const template = renderTemplate(metadataTemplate(route) ?? route.outboundUri ?? null, dialString);
     if (template) {
-        return template.includes("{number}") ? template.replace("{number}", dialString) : template;
+        return template;
     }
     if (route.domain.includes("/")) {
         return `${route.domain}${dialString}`;
