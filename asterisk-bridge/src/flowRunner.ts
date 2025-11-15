@@ -217,7 +217,8 @@ async function ensureMedia(playback: Playback) {
   const playable = await ensureUlaw(file);
   const relativePath = relative(config.soundsRoot, playable).replace(/\\/g, "/");
   const withoutExtension = relativePath.replace(/\.[^/.]+$/, "");
-  return `sound:${withoutExtension}`;
+  const prefix = config.soundPrefix ? `${config.soundPrefix.replace(/\/$/, "")}/` : "";
+  return `sound:${prefix}${withoutExtension}`;
 }
 
 async function notifyPanel(event: string, body: Record<string, any>) {

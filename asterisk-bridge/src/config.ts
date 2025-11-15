@@ -39,6 +39,7 @@ const pjsipDir = resolve(requireEnv("ASTERISK_PJSIP_DIR"));
 const soundsRoot = resolve(requireEnv("ASTERISK_SOUNDS_ROOT"));
 const soundsDir = resolve(optionalEnv("ASTERISK_SOUNDS_DIR") ?? soundsRoot);
 const cacheDir = resolve(optionalEnv("SOUNDS_CACHE_DIR") ?? soundsDir);
+const soundPrefix = optionalEnv("ASTERISK_SOUND_PREFIX") ?? undefined;
 ensureDir(pjsipDir);
 ensureDir(soundsRoot);
 ensureDir(soundsDir);
@@ -61,6 +62,7 @@ export const config = {
   soundsDir,
   soundsRoot,
   cacheDir,
+  soundPrefix,
   ttsProvider: optionalEnv("TTS_PROVIDER") ?? "pico",
   ringTimeout,
   dialTimeout,
