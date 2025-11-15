@@ -1,7 +1,7 @@
 import Fastify from "fastify";
-import { config } from "./config";
-import { startFlowRunner } from "./flowRunner";
-import { TrunkPayload, trunkManager } from "./trunkManager";
+import { config } from "./config.js";
+import { startFlowRunner } from "./flowRunner.js";
+import { TrunkPayload, trunkManager } from "./trunkManager.js";
 
 type UpsertBody = Omit<TrunkPayload, "id"> & { id?: string };
 

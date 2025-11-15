@@ -185,3 +185,22 @@ The campaign runner continues to originate calls directly against Asterisk using
 4. Launch a small campaign and confirm the callee hears the configured flow prompts, DTMF is captured, and campaign metrics update.
 
 The Asterisk bridge and the panel now work together without any HTTPS requirement, using plain HTTP between servers. Always secure access at the network layer (VPN, firewall rules, or private VLAN) to prevent unauthorized requests.
+
+## 8. Troubleshooting ARI connectivity and bridge startup
+
+### ARI port refuses connections (`ECONNREFUSED ...:8088`)
+
+1. Make sure Asterisk is running: `sudo systemctl status asterisk`. Start or restart it when needed with `sudo systemctl restart asterisk`.
+2. Confirm ARI HTTP binding in `/etc/asterisk/http.conf` contains `enabled = yes`, `bindaddr = 0.0.0.0`, and `bindport = 8088`. Reload Asterisk after editing.
+3. Verify credentials defined in `/etc/asterisk/ari.conf` (user, password, and `app = spotlight`) match the `.env` values. Use `asterisk -rx "core show settings"` to ensure the file is loading with the expected permissions.
+4. From the same host where `npm run dev` is running, test the endpoint directly:  
+   `curl -u spotlight:your-password http://107.174.63.45:8088/ari/ping`.  
+   You should see `{"ping":"pong"}`. If the request times out internally but works from localhost, open the firewall or add a reverse proxy/VPN so the development box can reach port `8088`.
+5. If the port is still closed, run `sudo ss -ltnp | grep 8088` on the PBX to confirm Asterisk is listening and no firewall (UFW, security groups, router ACLs) is blocking it.
+
+### Bridge fails with `ERR_MODULE_NOT_FOUND: .../dist/server`
+
+1. Always compile the TypeScript sources before running `npm run start`:  
+   `npm install` (first time) → `npm run build` → `npm run start`.
+2. `npm run dev` uses `tsx` to execute `src/index.ts` directly, so it works without the `dist` folder. The production `start` script expects `dist/server.js`; if the file is missing, delete `dist/`, re-run `npm run build`, and start again.
+3. When deploying with systemd, keep `WorkingDirectory` pointing to the folder that contains the freshly built `dist/` directory. Restart the service after every deploy to load the new build.

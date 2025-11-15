@@ -1,7 +1,7 @@
 import Fastify from "fastify";
-import { config } from "./config";
-import { startFlowRunner } from "./flowRunner";
-import { trunkManager } from "./trunkManager";
+import { config } from "./config.js";
+import { startFlowRunner } from "./flowRunner.js";
+import { trunkManager } from "./trunkManager.js";
 function validateToken(request) {
     const header = request.headers["x-bridge-token"] ?? request.headers["X-Bridge-Token"];
     if (typeof header === "string")
