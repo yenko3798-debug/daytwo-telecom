@@ -44,11 +44,41 @@ async function synthesizeTts(text, voice, language) {
         return file;
     }
 }
+async function tryTranscode(command, args) {
+    try {
+        await execFileAsync(command, args);
+        return true;
+    }
+    catch {
+        return false;
+    }
+}
+async function ensureUlaw(file) {
+    const ext = file.split(".").pop()?.toLowerCase();
+    if (ext === "ulaw" || ext === "mulaw")
+        return file;
+    const output = file.replace(/\.[^/.]+$/, ".ulaw");
+    try {
+        await fs.access(output);
+        return output;
+    }
+    catch { }
+    const soxArgs = [file, "-t", "ulaw", "-r", "8000", "-c", "1", output];
+    if (await tryTranscode("sox", soxArgs)) {
+        return output;
+    }
+    const ffmpegArgs = ["-y", "-i", file, "-ar", "8000", "-ac", "1", "-f", "mulaw", output];
+    if (await tryTranscode("ffmpeg", ffmpegArgs)) {
+        return output;
+    }
+    throw new Error("Unable to convert media to ulaw. Install sox or ffmpeg.");
+}
 async function ensureMedia(playback) {
     const file = playback.mode === "file"
         ? await downloadToCache(playback.url)
         : await synthesizeTts(playback.text, playback.voice, playback.language);
-    const relativePath = relative(config.soundsRoot, file).replace(/\\/g, "/");
+    const playable = await ensureUlaw(file);
+    const relativePath = relative(config.soundsRoot, playable).replace(/\\/g, "/");
     const withoutExtension = relativePath.replace(/\.[^/.]+$/, "");
     return `sound:${withoutExtension}`;
 }
