@@ -33,26 +33,38 @@ function metadataTemplate(route: RouteLike) {
   return undefined;
 }
 
-function renderTemplate(template: string | null | undefined, dialString: string) {
+type TemplateResult =
+  | { type: "channel"; value: string }
+  | { type: "sipUri"; user: string; host?: string };
+
+function renderTemplate(template: string | null | undefined, dialString: string): TemplateResult | null {
   if (!template) return null;
   const replaced = template.includes("{number}") ? template.replaceAll("{number}", dialString) : template;
   const normalized = replaced.trim();
   if (!normalized) return null;
-  const looksLikeChannel = /^[A-Za-z0-9]+\/.+/.test(normalized);
-  const looksLikeUri = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(normalized) || normalized.includes("@");
-  if (looksLikeChannel || looksLikeUri) {
-    if (looksLikeChannel) return normalized;
-    const hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(normalized);
-    const uri = hasScheme ? normalized : `sip:${normalized}`;
-    return `PJSIP/${uri}`;
+  if (/^[A-Za-z0-9]+\/.+/.test(normalized)) {
+    return { type: "channel", value: normalized };
+  }
+
+  const sipMatch = normalized.match(/^sips?:([^@]+)@(.+)$/i);
+  if (sipMatch) {
+    return { type: "sipUri", user: sipMatch[1], host: sipMatch[2] };
+  }
+  const genericMatch = normalized.includes("@") ? normalized.match(/^([^@]+)@(.+)$/) : null;
+  if (genericMatch) {
+    return { type: "sipUri", user: genericMatch[1], host: genericMatch[2] };
   }
   return null;
 }
 
 function buildEndpoint(route: RouteLike, dialString: string) {
   const template = renderTemplate(metadataTemplate(route) ?? route.outboundUri ?? null, dialString);
-  if (template) {
-    return template;
+  if (template?.type === "channel") {
+    return template.value;
+  }
+  if (template?.type === "sipUri") {
+    const safeId = toSafeId(route.id);
+    return `PJSIP/bridge-${safeId}/${template.user}`;
   }
   if (route.domain.includes("/")) {
     return `${route.domain}${dialString}`;
