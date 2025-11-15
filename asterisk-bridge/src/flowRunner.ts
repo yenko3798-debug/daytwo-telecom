@@ -192,21 +192,21 @@ async function tryTranscode(command: string, args: string[]) {
 
 async function ensureUlaw(file: string) {
   const ext = file.split(".").pop()?.toLowerCase();
-  if (ext === "ulaw" || ext === "mulaw") return file;
+  if (ext === "ulaw" || ext === "mulaw") return { file, extension: "ulaw" };
   const output = file.replace(/\.[^/.]+$/, ".ulaw");
   try {
     await fs.access(output);
-    return output;
+    return { file: output, extension: "ulaw" };
   } catch {}
   const soxArgs = [file, "-t", "ulaw", "-r", "8000", "-c", "1", output];
   if (await tryTranscode("sox", soxArgs)) {
-    return output;
+    return { file: output, extension: "ulaw" };
   }
   const ffmpegArgs = ["-y", "-i", file, "-ar", "8000", "-ac", "1", "-f", "mulaw", output];
   if (await tryTranscode("ffmpeg", ffmpegArgs)) {
-    return output;
+    return { file: output, extension: "ulaw" };
   }
-  throw new Error("Unable to convert media to ulaw. Install sox or ffmpeg.");
+  return { file, extension: file.split(".").pop()?.toLowerCase() ?? "wav" };
 }
 
 async function ensureMedia(playback: Playback) {
@@ -214,11 +214,12 @@ async function ensureMedia(playback: Playback) {
     playback.mode === "file"
       ? await downloadToCache(playback.url)
       : await synthesizeTts(playback.text, playback.voice, playback.language);
-  const playable = await ensureUlaw(file);
+  const { file: playable, extension } = await ensureUlaw(file);
   const relativePath = relative(config.soundsRoot, playable).replace(/\\/g, "/");
   const withoutExtension = relativePath.replace(/\.[^/.]+$/, "");
   const prefix = config.soundPrefix ? `${config.soundPrefix.replace(/\/$/, "")}/` : "";
-  return `sound:${prefix}${withoutExtension}`;
+  const suffix = config.soundExtension ? `.${config.soundExtension.replace(/^\./, "")}` : "";
+  return `sound:${prefix}${withoutExtension}${suffix || `.${extension}`}`;
 }
 
 async function notifyPanel(event: string, body: Record<string, any>) {
