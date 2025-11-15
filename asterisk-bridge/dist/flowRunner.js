@@ -73,6 +73,12 @@ async function ensureUlaw(file) {
     }
     return { file, extension: file.split(".").pop()?.toLowerCase() ?? "wav" };
 }
+function normalizePrefix(value) {
+    if (!value)
+        return "";
+    const trimmed = value.trim().replace(/^\/+|\/+$/g, "");
+    return trimmed.length ? `${trimmed}/` : "";
+}
 async function ensureMedia(playback) {
     const file = playback.mode === "file"
         ? await downloadToCache(playback.url)
@@ -80,7 +86,7 @@ async function ensureMedia(playback) {
     const { file: playable, extension } = await ensureUlaw(file);
     const relativePath = relative(config.soundsRoot, playable).replace(/\\/g, "/");
     const withoutExtension = relativePath.replace(/\.[^/.]+$/, "");
-    const prefix = config.soundPrefix ? `${config.soundPrefix.replace(/\/$/, "")}/` : "";
+    const prefix = normalizePrefix(config.soundPrefix);
     const suffix = config.soundExtension ? `.${config.soundExtension.replace(/^\./, "")}` : "";
     return `sound:${prefix}${withoutExtension}${suffix || `.${extension}`}`;
 }
