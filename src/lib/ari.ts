@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import { SipRoute } from "@prisma/client";
 
 type AriConfig = {
@@ -13,7 +14,12 @@ type AriConfig = {
 type OriginateOptions = {
   route: Pick<
     SipRoute,
-    "domain" | "outboundUri" | "trunkPrefix" | "callerIdFormat" | "metadata"
+    | "id"
+    | "domain"
+    | "outboundUri"
+    | "trunkPrefix"
+    | "callerIdFormat"
+    | "metadata"
   >;
   dialString: string;
   callerId: string;
@@ -26,6 +32,27 @@ export type OriginateResult = {
   channelId: string | null;
   payload: any;
 };
+
+const bridgeConfigured =
+  Boolean(process.env.ASTERISK_BRIDGE_URL) &&
+  Boolean(process.env.ASTERISK_BRIDGE_TOKEN);
+
+function sanitizeRouteId(id: string) {
+  const normalized = id.toLowerCase().replace(/[^a-z0-9]/g, "");
+  if (normalized.length > 0) return normalized;
+  return createHash("sha256").update(id).digest("hex").slice(0, 16);
+}
+
+function metadataTemplate(route: OriginateOptions["route"]) {
+  if (!route.metadata || typeof route.metadata !== "object" || Array.isArray(route.metadata)) {
+    return undefined;
+  }
+  const template = (route.metadata as Record<string, any>).dialEndpoint;
+  if (typeof template === "string" && template.length > 0) {
+    return template;
+  }
+  return undefined;
+}
 
 function readConfig(): AriConfig {
   const baseUrl = process.env.ARI_BASE_URL?.replace(/\/$/, "");
@@ -58,11 +85,18 @@ function readConfig(): AriConfig {
 }
 
 function buildEndpoint(route: OriginateOptions["route"], dialString: string) {
-  if (route.outboundUri) {
-    return route.outboundUri.replace("{number}", dialString);
+  const template = metadataTemplate(route) ?? route.outboundUri;
+  if (template) {
+    return template.includes("{number}")
+      ? template.replace("{number}", dialString)
+      : template;
   }
   if (route.domain.includes("/")) {
     return `${route.domain}${dialString}`;
+  }
+  if (bridgeConfigured) {
+    const safeId = sanitizeRouteId(route.id);
+    return `PJSIP/bridge-${safeId}/${dialString}`;
   }
   return `SIP/${dialString}@${route.domain}`;
 }
