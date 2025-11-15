@@ -37,6 +37,15 @@ const bridgeConfigured =
   Boolean(process.env.ASTERISK_BRIDGE_URL) &&
   Boolean(process.env.ASTERISK_BRIDGE_TOKEN);
 
+function bridgeConfig() {
+  const baseUrl = process.env.ASTERISK_BRIDGE_URL?.replace(/\/$/, "");
+  const token = process.env.ASTERISK_BRIDGE_TOKEN;
+  if (!baseUrl || !token) {
+    throw new Error("Asterisk bridge is not configured");
+  }
+  return { baseUrl, token };
+}
+
 function sanitizeRouteId(id: string) {
   const normalized = id.toLowerCase().replace(/[^a-z0-9]/g, "");
   if (normalized.length > 0) return normalized;
@@ -101,7 +110,38 @@ function buildEndpoint(route: OriginateOptions["route"], dialString: string) {
   return `SIP/${dialString}@${route.domain}`;
 }
 
-export async function originateCall(opts: OriginateOptions): Promise<OriginateResult> {
+async function originateViaBridge(opts: OriginateOptions): Promise<OriginateResult> {
+  const cfg = bridgeConfig();
+  const response = await fetch(`${cfg.baseUrl}/api/calls`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-bridge-token": cfg.token,
+    },
+    body: JSON.stringify({
+      route: opts.route,
+      dialString: opts.dialString,
+      callerId: opts.callerId,
+      timeoutSeconds: opts.timeoutSeconds,
+      variables: opts.variables,
+      appArgs: opts.appArgs,
+    }),
+  });
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`Bridge originate failed (${response.status}): ${text}`);
+  }
+  let payload: any = null;
+  try {
+    payload = await response.json();
+  } catch {
+    payload = null;
+  }
+  const channelId = payload?.channelId ?? payload?.id ?? null;
+  return { channelId, payload };
+}
+
+async function originateViaAri(opts: OriginateOptions): Promise<OriginateResult> {
   const config = readConfig();
   const endpoint = buildEndpoint(opts.route, opts.dialString);
   const params = new URLSearchParams();
@@ -149,4 +189,11 @@ export async function originateCall(opts: OriginateOptions): Promise<OriginateRe
 
   const channelId = payload?.id ?? null;
   return { channelId, payload };
+}
+
+export async function originateCall(opts: OriginateOptions): Promise<OriginateResult> {
+  if (bridgeConfigured) {
+    return originateViaBridge(opts);
+  }
+  return originateViaAri(opts);
 }

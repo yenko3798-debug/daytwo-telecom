@@ -2,7 +2,7 @@ import { promises as fs } from "fs";
 import { join } from "path";
 import { config } from "./config.js";
 import { hashKey, runCommand } from "./utils.js";
-function toSafeId(id) {
+export function toSafeId(id) {
     const trimmed = id.toLowerCase().replace(/[^a-z0-9]/g, "");
     if (trimmed.length > 0)
         return trimmed;

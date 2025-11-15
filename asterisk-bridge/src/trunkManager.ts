@@ -16,7 +16,7 @@ export type TrunkPayload = {
   metadata?: Record<string, any> | null;
 };
 
-function toSafeId(id: string) {
+export function toSafeId(id: string) {
   const trimmed = id.toLowerCase().replace(/[^a-z0-9]/g, "");
   if (trimmed.length > 0) return trimmed;
   return hashKey(id).slice(0, 12);
