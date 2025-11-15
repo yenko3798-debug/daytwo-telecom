@@ -4,18 +4,22 @@ import { resolve } from "path";
 
 dotenv.config();
 
+function expandEnv(value: string) {
+  return value.replace(/\$\{([^}]+)\}/g, (_, name) => process.env[name]?.trim() ?? "");
+}
+
 function requireEnv(key: string) {
   const value = process.env[key];
   if (!value || value.trim().length === 0) {
     throw new Error(`Missing environment variable ${key}`);
   }
-  return value.trim();
+  return expandEnv(value.trim());
 }
 
 function optionalEnv(key: string) {
   const value = process.env[key];
   if (!value || value.trim().length === 0) return undefined;
-  return value.trim();
+  return expandEnv(value.trim());
 }
 
 function ensureDir(path: string) {
@@ -34,7 +38,7 @@ const ariBaseUrl = requireEnv("ARI_BASE_URL").replace(/\/$/, "");
 const pjsipDir = resolve(requireEnv("ASTERISK_PJSIP_DIR"));
 const soundsDir = resolve(requireEnv("ASTERISK_SOUNDS_DIR"));
 const cacheDir = resolve(optionalEnv("SOUNDS_CACHE_DIR") ?? soundsDir);
-const soundsRoot = resolve(soundsDir, "..");
+const soundsRoot = resolve(optionalEnv("ASTERISK_SOUNDS_ROOT") ?? resolve(soundsDir, ".."));
 ensureDir(pjsipDir);
 ensureDir(soundsDir);
 ensureDir(cacheDir);

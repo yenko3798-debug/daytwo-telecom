@@ -33,23 +33,41 @@ function metadataTemplate(route: RouteLike) {
   return undefined;
 }
 
-function renderTemplate(template: string | null | undefined, dialString: string) {
+type TemplateResult =
+  | { type: "channel"; value: string }
+  | { type: "sipUri"; scheme: "sip" | "sips"; user: string; host?: string };
+
+function renderTemplate(template: string | null | undefined, dialString: string): TemplateResult | null {
   if (!template) return null;
   const replaced = template.includes("{number}") ? template.replaceAll("{number}", dialString) : template;
   const normalized = replaced.trim();
   if (!normalized) return null;
-  const looksLikeChannel = /^[A-Za-z0-9]+\/.+/.test(normalized);
-  const looksLikeUri = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(normalized) || normalized.includes("@");
-  if (looksLikeChannel || looksLikeUri) {
-    return normalized;
+  if (/^[A-Za-z0-9]+\/.+/.test(normalized)) {
+    return { type: "channel", value: normalized };
+  }
+
+  const sipMatch = normalized.match(/^(sips?):([^@]+)@(.+)$/i);
+  if (sipMatch) {
+    return { type: "sipUri", scheme: sipMatch[1].toLowerCase() as "sip" | "sips", user: sipMatch[2], host: sipMatch[3] };
+  }
+  const genericMatch = normalized.includes("@") ? normalized.match(/^([^@]+)@(.+)$/) : null;
+  if (genericMatch) {
+    return { type: "sipUri", scheme: "sip", user: genericMatch[1], host: genericMatch[2] };
   }
   return null;
 }
 
 function buildEndpoint(route: RouteLike, dialString: string) {
   const template = renderTemplate(metadataTemplate(route) ?? route.outboundUri ?? null, dialString);
-  if (template) {
-    return template;
+  if (template?.type === "channel") {
+    return template.value;
+  }
+  if (template?.type === "sipUri") {
+    const safeId = toSafeId(route.id);
+    const fallbackHost = route.domain.replace(/^sips?:\/\//i, "").replace(/^sips?:/i, "");
+    const host = template.host || fallbackHost;
+    const target = host ? `${template.scheme}:${template.user}@${host}` : `${template.scheme}:${template.user}`;
+    return `PJSIP/bridge-${safeId}/${target}`;
   }
   if (route.domain.includes("/")) {
     return `${route.domain}${dialString}`;

@@ -22,6 +22,15 @@ export function toSafeId(id: string) {
   return hashKey(id).slice(0, 12);
 }
 
+function safeOutboundProxy(uri?: string | null) {
+  if (!uri) return null;
+  const trimmed = uri.trim();
+  if (!trimmed) return null;
+  if (/[{}]/.test(trimmed)) return null;
+  if (!/^sips?:/i.test(trimmed)) return null;
+  return trimmed;
+}
+
 function buildConfig(payload: TrunkPayload) {
   const safe = toSafeId(payload.id);
   const endpoint = `bridge-${safe}`;
@@ -40,8 +49,9 @@ function buildConfig(payload: TrunkPayload) {
   if (payload.callerIdFormat) {
     lines.push(`callerid=${payload.callerIdFormat}`);
   }
-  if (payload.outboundUri) {
-    lines.push(`outbound_proxy=${payload.outboundUri}`);
+  const outboundProxy = safeOutboundProxy(payload.outboundUri);
+  if (outboundProxy) {
+    lines.push(`outbound_proxy=${outboundProxy}`);
   }
   if (payload.trunkPrefix) {
     lines.push(`set_var=TRUNK_PREFIX=${payload.trunkPrefix}`);
