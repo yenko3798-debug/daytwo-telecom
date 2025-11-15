@@ -38,7 +38,7 @@ const ariBaseUrl = requireEnv("ARI_BASE_URL").replace(/\/$/, "");
 const pjsipDir = resolve(requireEnv("ASTERISK_PJSIP_DIR"));
 const soundsDir = resolve(requireEnv("ASTERISK_SOUNDS_DIR"));
 const cacheDir = resolve(optionalEnv("SOUNDS_CACHE_DIR") ?? soundsDir);
-const soundsRoot = resolve(soundsDir, "..");
+const soundsRoot = resolve(optionalEnv("ASTERISK_SOUNDS_ROOT") ?? resolve(soundsDir, ".."));
 ensureDir(pjsipDir);
 ensureDir(soundsDir);
 ensureDir(cacheDir);
