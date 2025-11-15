@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { syncAsteriskTrunk, deleteAsteriskTrunk } from "@/lib/asteriskBridge";
 import { getSession } from "@/lib/auth";
 
 const updateSchema = z.object({
@@ -37,6 +38,12 @@ export async function PATCH(
   if (!ensureAdmin(session.role)) return forbidden();
 
   try {
+    const previous = await prisma.sipRoute.findUnique({
+      where: { id: params.id },
+    });
+    if (!previous) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
     const body = updateSchema.parse(await req.json());
     const data: any = {};
     Object.assign(data, body);
@@ -60,6 +67,34 @@ export async function PATCH(
       where: { id: params.id },
       data,
     });
+    try {
+      await syncAsteriskTrunk(route);
+    } catch (error: any) {
+      const revertData = {
+        name: previous.name,
+        provider: previous.provider,
+        domain: previous.domain,
+        authUsername: previous.authUsername,
+        authPassword: previous.authPassword,
+        outboundUri: previous.outboundUri,
+        trunkPrefix: previous.trunkPrefix,
+        callerIdFormat: previous.callerIdFormat,
+        maxChannels: previous.maxChannels,
+        concurrencyLimit: previous.concurrencyLimit,
+        costPerMinuteCents: previous.costPerMinuteCents,
+        isPublic: previous.isPublic,
+        metadata: previous.metadata,
+        status: previous.status,
+      };
+      await prisma.sipRoute.update({
+        where: { id: params.id },
+        data: revertData,
+      }).catch(() => {});
+      return NextResponse.json(
+        { error: error?.message ?? "Unable to sync route with dialer" },
+        { status: 502 }
+      );
+    }
     return NextResponse.json({ route: { ...route, status: route.status.toLowerCase() } });
   } catch (error: any) {
     if (error?.issues?.[0]?.message) {
@@ -84,6 +119,15 @@ export async function DELETE(
     return NextResponse.json(
       { error: "Route is associated with existing campaigns" },
       { status: 409 }
+    );
+  }
+
+  try {
+    await deleteAsteriskTrunk(params.id);
+  } catch (error: any) {
+    return NextResponse.json(
+      { error: error?.message ?? "Unable to remove route from dialer" },
+      { status: 502 }
     );
   }
 

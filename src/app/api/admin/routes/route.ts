@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { syncAsteriskTrunk } from "@/lib/asteriskBridge";
 import { getSession } from "@/lib/auth";
 
 const createSchema = z.object({
@@ -67,6 +68,15 @@ export async function POST(req: Request) {
         createdById: session.sub,
       },
     });
+    try {
+      await syncAsteriskTrunk(route);
+    } catch (error: any) {
+      await prisma.sipRoute.delete({ where: { id: route.id } }).catch(() => {});
+      return NextResponse.json(
+        { error: error?.message ?? "Unable to sync route with dialer" },
+        { status: 502 }
+      );
+    }
     return NextResponse.json({ route: { ...route, status: route.status.toLowerCase() } }, { status: 201 });
   } catch (error: any) {
     if (error?.issues?.[0]?.message) {

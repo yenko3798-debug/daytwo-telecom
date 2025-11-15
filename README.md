@@ -84,8 +84,11 @@ Use the checklist below to connect the outbound dialer to an Asterisk instance v
    ARI_CONTEXT=outbound
    ARI_EXTENSION=s
    ARI_INTERNAL_TOKEN=replace-with-long-random-string
+   ASTERISK_BRIDGE_URL=http://192.210.140.80:4000
+   ASTERISK_BRIDGE_TOKEN=replace-with-bridge-token
    ```
    `ARI_INTERNAL_TOKEN` secures the internal endpoints the PBX calls when it needs call-flow definitions.
+   `ASTERISK_BRIDGE_URL` and `ASTERISK_BRIDGE_TOKEN` point to the bridge service described in `asterisk-bridge/README.md`.
 
 6. **Webhook endpoints**  
    - `POST /api/webhooks/ari` receives status updates (`call.answered`, `call.completed`, etc.) from your middleware or dialplan. Pass `sessionId`, optional `dtmf`, `durationSeconds`, `recordingUrl`, `costCents`.  
