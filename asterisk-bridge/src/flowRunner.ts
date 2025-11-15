@@ -252,17 +252,9 @@ async function ensureMedia(playback: Playback) {
       ? await downloadToCache(playback.url)
       : await synthesizeTts(playback.text, playback.voice, playback.language);
   const variants = await ensureNormalizedVariants(file);
-  const chosen = config.soundExtension?.toLowerCase() === "wav" ? variants.wav : variants.ulaw;
-  const relativePath = relative(config.soundsRoot, chosen).replace(/\\/g, "/");
-  const withoutExtension = relativePath.replace(/\.[^/.]+$/, "");
+  const basePath = relative(config.soundsRoot, variants.ulaw).replace(/\\/g, "/").replace(/\.ulaw$/, "");
   const prefix = normalizePrefix(config.soundPrefix);
-  const suffix = config.soundExtension ? `.${config.soundExtension.replace(/^\./, "")}` : "";
-  const defaultExt = config.soundExtension
-    ? ""
-    : chosen.endsWith(".wav")
-    ? ".wav"
-    : ".ulaw";
-  return `sound:${prefix}${withoutExtension}${suffix || defaultExt}`;
+  return `sound:${prefix}${basePath}`;
 }
 
 async function notifyPanel(event: string, body: Record<string, any>) {
