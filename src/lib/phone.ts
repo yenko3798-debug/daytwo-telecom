@@ -38,9 +38,11 @@ export function normalizePhoneNumber(input: string, defaultCountry: CountryCode 
 }
 
 export function toDialable(normalized: string, trunkPrefix?: string | null) {
-  const digits = normalized.startsWith("+") ? normalized.slice(1) : normalized;
-  if (trunkPrefix) {
-    return `${trunkPrefix}${digits}`;
+  if (!normalized) return normalized;
+  const digits = normalized.replace(/\D/g, "");
+  if (!digits) return normalized;
+  if (trunkPrefix && trunkPrefix.length > 0) {
+    return digits.startsWith(trunkPrefix) ? digits : `${trunkPrefix}${digits}`;
   }
-  return normalized;
+  return digits;
 }

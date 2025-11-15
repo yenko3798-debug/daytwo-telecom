@@ -2,9 +2,11 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
+import { findPhoneNumbersInText, type CountryCode } from "libphonenumber-js";
 import { PageFrame, MotionCard, ShimmerTile } from "@/components/ui/LuxuryPrimitives";
 import { usePageLoading } from "@/hooks/usePageLoading";
 import { RATE_PER_LEAD_CENTS } from "@/lib/flows";
+import { normalizePhoneNumber, toDialable } from "@/lib/phone";
 
 type ToastItem = { id: string; message: string; tone?: "info" | "error" | "success" };
 
@@ -78,6 +80,9 @@ type CampaignResponse = {
 
 const RATE_PER_LEAD = RATE_PER_LEAD_CENTS / 100;
 
+const PHONE_FRAGMENT_REGEX = /\+?\d[\d\s().-]{6,}\d/g;
+const SEGMENT_DELIMITER = /[\n,;]+/;
+
 const ICONS = {
   Upload: (props: React.SVGProps<SVGSVGElement>) => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
@@ -111,22 +116,26 @@ const ICONS = {
   ),
 };
 
-function extractPhones(text: string) {
-  const out = new Set<string>();
-  const regex = /(?:(?:\+?\d[\d\-\s().]{6,}\d))/g;
-  const matches = text.match(regex) ?? [];
-  for (const match of matches) {
-    let digits = match.replace(/[^\d+]/g, "");
-    if (!digits) continue;
-    if (!digits.startsWith("+")) {
-      digits = digits.replace(/^1/, "");
-      digits = `+1${digits}`;
-    }
-    if (digits.length >= 10) {
-      out.add(digits);
+function extractPhones(text: string, region: CountryCode = "US") {
+  const normalized = new Set<string>();
+  const detected = findPhoneNumbersInText(text, region);
+  for (const match of detected) {
+    const e164 = match.number?.number;
+    if (e164) normalized.add(e164);
+  }
+  const segments = text
+    .replace(/\r/g, "\n")
+    .split(SEGMENT_DELIMITER)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+  for (const segment of segments) {
+    const matches = segment.match(PHONE_FRAGMENT_REGEX) ?? [];
+    for (const raw of matches) {
+      const e164 = normalizePhoneNumber(raw, region);
+      if (e164) normalized.add(e164);
     }
   }
-  return Array.from(out);
+  return Array.from(normalized);
 }
 
 type CampaignState = {
@@ -231,6 +240,16 @@ export default function StartCampaignPage() {
   }, [push]);
 
   const totalCost = useMemo(() => leads.length * RATE_PER_LEAD, [leads.length]);
+
+  const selectedRouteMeta = useMemo(
+    () => routes.find((route) => route.id === selectedRoute) ?? null,
+    [routes, selectedRoute]
+  );
+
+  const dialPreview = useMemo(() => {
+    if (!selectedRouteMeta || leads.length === 0) return null;
+    return toDialable(leads[0], selectedRouteMeta.trunkPrefix ?? undefined);
+  }, [selectedRouteMeta, leads]);
 
   const handleCreateCampaign = useCallback(async () => {
     if (!selectedFlow || !selectedRoute) {
@@ -511,18 +530,19 @@ export default function StartCampaignPage() {
                 </label>
               </div>
 
-              <textarea
-                value={rawLeadText}
-                onChange={(event) => setRawLeadText(event.target.value)}
-                rows={8}
-                placeholder="Paste phone numbers or free-form text, we'll extract valid MSISDNs automatically."
-                className="mt-3 w-full rounded-xl border border-white/60 bg-white/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40 dark:border-white/10 dark:bg-white/5 dark:text-white"
-              />
+                <textarea
+                  value={rawLeadText}
+                  onChange={(event) => setRawLeadText(event.target.value)}
+                  rows={8}
+                  placeholder="Paste phone numbers or free-form text, we'll extract valid MSISDNs automatically."
+                  className="mt-3 w-full rounded-xl border border-white/60 bg-white/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40 dark:border-white/10 dark:bg-white/5 dark:text-white"
+                />
 
-              <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-zinc-500 dark:text-zinc-400">
-                <span>{leads.length} deduplicated leads</span>
-                <span>Cost preview: ${totalCost.toFixed(2)} @ ${RATE_PER_LEAD.toFixed(2)} per lead</span>
-              </div>
+                <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-zinc-500 dark:text-zinc-400">
+                  <span>{leads.length} deduplicated leads</span>
+                  <span>Cost preview: ${totalCost.toFixed(2)} @ ${RATE_PER_LEAD.toFixed(2)} per lead</span>
+                  {dialPreview ? <span>Dial preview: {dialPreview}</span> : null}
+                </div>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-3">
