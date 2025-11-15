@@ -210,8 +210,9 @@ The Asterisk bridge and the panel now work together without any HTTPS requiremen
    - `sudo asterisk -rx "module load res_ari_applications.so"`
    - `sudo asterisk -rx "module load res_ari_events.so"`
    Add `load => res_ari.so` (etc.) to `/etc/asterisk/modules.conf` or ensure `autoload=yes` so they persist across restarts.
-3. Confirm `ari.conf` includes `applications = spotlight` (or `app = spotlight` on older releases) inside the `[general]` block and the `[spotlight]` user block. Reload with `sudo asterisk -rx "core reload"`.
-4. Retest locally: `curl -u spotlight:password http://127.0.0.1:8088/ari/ping`. Once it returns `{"ping":"pong"}`, retry from the bridge host.
+3. On some Debian/Ubuntu builds, `modules.conf` ships with explicit `noload = res_ari.so` lines. Remove any `noload` entries for `res_ari*`, keep `autoload=yes`, then run `sudo asterisk -rx "core restart now"` so Asterisk reloads with the modules active.
+4. Confirm `ari.conf` includes `applications = spotlight` (or `app = spotlight` on older releases) inside the `[general]` block and the `[spotlight]` user block. Reload with `sudo asterisk -rx "core reload"`.
+5. Retest locally: `curl -u spotlight:password http://127.0.0.1:8088/ari/ping`. Once it returns `{"ping":"pong"}`, retry from the bridge host.
 
 ### Bridge fails with `ERR_MODULE_NOT_FOUND: .../dist/server`
 
