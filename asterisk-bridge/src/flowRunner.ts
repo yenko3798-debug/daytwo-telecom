@@ -268,7 +268,7 @@ function createSessionState(payload: SessionPayload, channel: any) {
   return state;
 }
 
-async function handleGather(state: SessionState, node: GatherNode) {
+async function handleGather(state: SessionState, node: GatherNode): Promise<string | null> {
   let attempt = 0;
   while (attempt < node.attempts) {
     if (node.prompt) {
@@ -308,7 +308,7 @@ async function handleGather(state: SessionState, node: GatherNode) {
   return node.defaultNext ?? null;
 }
 
-async function handleDial(state: SessionState, node: DialNode) {
+async function handleDial(state: SessionState, node: DialNode): Promise<string | null> {
   const bridgeId = newId("bridge");
   const bridge = client.Bridge();
   const timeoutMs = (node.timeoutSeconds ?? config.dialTimeout) * 1000;
@@ -378,49 +378,56 @@ async function handleDial(state: SessionState, node: DialNode) {
   return node.next ?? null;
 }
 
+function assertNever(value: never): never {
+  throw new Error(`Unsupported node ${(value as FlowNode).type}`);
+}
+
 async function runFlow(state: SessionState) {
-  let current = state.flow.entry;
-  while (current && !state.completed) {
+  let current: string | null = state.flow.entry;
+  while (current !== null && !state.completed) {
     const node = state.nodeMap.get(current);
     if (!node) {
       throw new Error(`Flow node ${current} missing`);
     }
-    if (node.type === "play") {
-      const media = await ensureMedia(node.playback);
-      await playMedia(state.channel, media);
-      current = node.next ?? null;
-      continue;
-    }
-    if (node.type === "gather") {
-      current = await handleGather(state, {
-        ...node,
-        attempts: node.attempts ?? 1,
-        maxDigits: node.maxDigits ?? 1,
-        minDigits: node.minDigits ?? 1,
-        timeoutSeconds: node.timeoutSeconds ?? 5,
-      });
-      continue;
-    }
-    if (node.type === "dial") {
-      current = await handleDial(state, node);
-      continue;
-    }
-    if (node.type === "pause") {
-      await pause(node.durationSeconds * 1000);
-      current = node.next ?? null;
-      continue;
-    }
-    if (node.type === "hangup") {
-      state.completed = true;
-      await new Promise<void>((resolve, reject) => {
-        state.channel.hangup({ reason: node.reason ?? "completed" }, (error: any) => {
-          if (error) reject(error);
-          else resolve();
+    switch (node.type) {
+      case "play": {
+        const media = await ensureMedia(node.playback);
+        await playMedia(state.channel, media);
+        current = node.next ?? null;
+        break;
+      }
+      case "gather": {
+        current = await handleGather(state, {
+          ...node,
+          attempts: node.attempts ?? 1,
+          maxDigits: node.maxDigits ?? 1,
+          minDigits: node.minDigits ?? 1,
+          timeoutSeconds: node.timeoutSeconds ?? 5,
         });
-      });
-      return;
+        break;
+      }
+      case "dial": {
+        current = await handleDial(state, node);
+        break;
+      }
+      case "pause": {
+        await pause(node.durationSeconds * 1000);
+        current = node.next ?? null;
+        break;
+      }
+      case "hangup": {
+        state.completed = true;
+        await new Promise<void>((resolve, reject) => {
+          state.channel.hangup({ reason: node.reason ?? "completed" }, (error: any) => {
+            if (error) reject(error);
+            else resolve();
+          });
+        });
+        return;
+      }
+      default:
+        assertNever(node);
     }
-    throw new Error(`Unsupported node ${node.type}`);
   }
 }
 

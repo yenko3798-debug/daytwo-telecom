@@ -2,6 +2,14 @@
 
 This package contains the standalone service that connects your Next.js control panel to an Asterisk PBX over ARI. Follow the steps below on a fresh VPS to provision Asterisk, install the bridge, and expose HTTP endpoints the panel can call. The guide assumes Ubuntu 22.04 or newer with root access.
 
+## Quick start
+
+1. `git clone https://your-repo.git && cd your-repo/asterisk-bridge`
+2. `cp .env.example .env` and populate every value (see section 4.3)
+3. `npm install` to pull runtime deps plus TypeScript tooling such as `@types/ari-client`
+4. `npm run build` to compile the TypeScript sources
+5. `npm run start` for a foreground test or continue to section 5 to run under systemd
+
 ## 1. System preparation
 
 1. Update packages and install dependencies:
