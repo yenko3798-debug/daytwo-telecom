@@ -36,10 +36,11 @@ const panelBaseUrl = requireEnv("PANEL_BASE_URL").replace(/\/$/, "");
 const panelWebhookUrl = requireEnv("PANEL_WEBHOOK_URL");
 const ariBaseUrl = requireEnv("ARI_BASE_URL").replace(/\/$/, "");
 const pjsipDir = resolve(requireEnv("ASTERISK_PJSIP_DIR"));
-const soundsDir = resolve(requireEnv("ASTERISK_SOUNDS_DIR"));
+const soundsRoot = resolve(requireEnv("ASTERISK_SOUNDS_ROOT"));
+const soundsDir = resolve(optionalEnv("ASTERISK_SOUNDS_DIR") ?? soundsRoot);
 const cacheDir = resolve(optionalEnv("SOUNDS_CACHE_DIR") ?? soundsDir);
-const soundsRoot = resolve(optionalEnv("ASTERISK_SOUNDS_ROOT") ?? resolve(soundsDir, ".."));
 ensureDir(pjsipDir);
+ensureDir(soundsRoot);
 ensureDir(soundsDir);
 ensureDir(cacheDir);
 
