@@ -190,23 +190,54 @@ async function tryTranscode(command: string, args: string[]) {
   }
 }
 
-async function ensureUlaw(file: string) {
-  const ext = file.split(".").pop()?.toLowerCase();
-  if (ext === "ulaw" || ext === "mulaw") return { file, extension: "ulaw" };
-  const output = file.replace(/\.[^/.]+$/, ".ulaw");
+async function fileExists(path: string) {
   try {
-    await fs.access(output);
-    return { file: output, extension: "ulaw" };
-  } catch {}
-  const soxArgs = [file, "-t", "ulaw", "-r", "8000", "-c", "1", output];
-  if (await tryTranscode("sox", soxArgs)) {
-    return { file: output, extension: "ulaw" };
+    await fs.access(path);
+    return true;
+  } catch {
+    return false;
   }
-  const ffmpegArgs = ["-y", "-i", file, "-ar", "8000", "-ac", "1", "-f", "mulaw", output];
-  if (await tryTranscode("ffmpeg", ffmpegArgs)) {
-    return { file: output, extension: "ulaw" };
+}
+
+async function normalizeToWav(input: string, output: string) {
+  const tmp = `${output}.tmp`;
+  await fs.rm(tmp, { force: true }).catch(() => {});
+  const soxArgs = [input, "-r", "8000", "-c", "1", "-b", "16", "-e", "signed-integer", tmp];
+  if (!(await tryTranscode("sox", soxArgs))) {
+    const ffmpegArgs = ["-y", "-i", input, "-ar", "8000", "-ac", "1", "-sample_fmt", "s16", tmp];
+    if (!(await tryTranscode("ffmpeg", ffmpegArgs))) {
+      throw new Error("Unable to normalize audio to 8k mono WAV. Install sox or ffmpeg.");
+    }
   }
-  return { file, extension: file.split(".").pop()?.toLowerCase() ?? "wav" };
+  await fs.rename(tmp, output);
+  return output;
+}
+
+async function convertWavToUlaw(input: string, output: string) {
+  const tmp = `${output}.tmp`;
+  await fs.rm(tmp, { force: true }).catch(() => {});
+  const soxArgs = [input, "-t", "ulaw", "-r", "8000", "-c", "1", tmp];
+  if (!(await tryTranscode("sox", soxArgs))) {
+    const ffmpegArgs = ["-y", "-i", input, "-ar", "8000", "-ac", "1", "-f", "mulaw", tmp];
+    if (!(await tryTranscode("ffmpeg", ffmpegArgs))) {
+      throw new Error("Unable to convert audio to ulaw. Install sox or ffmpeg.");
+    }
+  }
+  await fs.rename(tmp, output);
+  return output;
+}
+
+async function ensureNormalizedVariants(file: string) {
+  const base = file.replace(/\.[^/.]+$/, "");
+  const wavPath = `${base}.wav`;
+  const ulawPath = `${base}.ulaw`;
+  if (!(await fileExists(wavPath))) {
+    await normalizeToWav(file, wavPath);
+  }
+  if (!(await fileExists(ulawPath))) {
+    await convertWavToUlaw(wavPath, ulawPath);
+  }
+  return { wav: wavPath, ulaw: ulawPath };
 }
 
 function normalizePrefix(value?: string) {
@@ -220,12 +251,18 @@ async function ensureMedia(playback: Playback) {
     playback.mode === "file"
       ? await downloadToCache(playback.url)
       : await synthesizeTts(playback.text, playback.voice, playback.language);
-  const { file: playable, extension } = await ensureUlaw(file);
-  const relativePath = relative(config.soundsRoot, playable).replace(/\\/g, "/");
+  const variants = await ensureNormalizedVariants(file);
+  const chosen = config.soundExtension?.toLowerCase() === "wav" ? variants.wav : variants.ulaw;
+  const relativePath = relative(config.soundsRoot, chosen).replace(/\\/g, "/");
   const withoutExtension = relativePath.replace(/\.[^/.]+$/, "");
   const prefix = normalizePrefix(config.soundPrefix);
   const suffix = config.soundExtension ? `.${config.soundExtension.replace(/^\./, "")}` : "";
-  return `sound:${prefix}${withoutExtension}${suffix || `.${extension}`}`;
+  const defaultExt = config.soundExtension
+    ? ""
+    : chosen.endsWith(".wav")
+    ? ".wav"
+    : ".ulaw";
+  return `sound:${prefix}${withoutExtension}${suffix || defaultExt}`;
 }
 
 async function notifyPanel(event: string, body: Record<string, any>) {
