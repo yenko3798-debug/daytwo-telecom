@@ -1,124 +1,179 @@
-# Spotlight
+# Asterisk Bridge Deployment Guide
 
-Spotlight is a [Tailwind Plus](https://tailwindcss.com/plus) site template built using [Tailwind CSS](https://tailwindcss.com) and [Next.js](https://nextjs.org).
+This package contains the standalone service that connects your Next.js control panel to an Asterisk PBX over ARI. Follow the steps below on a fresh VPS to provision Asterisk, install the bridge, and expose HTTP endpoints the panel can call. The guide assumes Ubuntu 22.04 or newer with root access.
 
-## Getting started
+## 1. System preparation
 
-To get started with this template, first install the npm dependencies:
-
-```bash
-npm install
-```
-
-Next, create a `.env.local` file in the root of your project and set the `NEXT_PUBLIC_SITE_URL` variable to your site's public URL:
-
-```
-NEXT_PUBLIC_SITE_URL=https://example.com
-```
-
-Configure the remaining environment variables required for authentication, the database, and NowPayments:
-
-```
-DATABASE_URL=postgres://user:pass@host:5432/db
-JWT_SECRET=replace-with-secure-random-string
-APP_URL=https://example.com
-NOWPAYMENTS_API_KEY=your-nowpayments-api-key
-NOWPAYMENTS_IPN_SECRET=your-nowpayments-ipn-secret
-NOWPAYMENTS_BASE_URL=https://api.nowpayments.io/v1
-```
-
-Leave `NOWPAYMENTS_BASE_URL` unset to use the default production endpoint.
-
-Run the Prisma migrations after updating the schema:
-
-```bash
-npx prisma migrate deploy
-npx prisma generate
-```
-
-Next, run the development server:
-
-```bash
-npm run dev
-```
-
-Finally, open [http://localhost:3000](http://localhost:3000) in your browser to view the website.
-
-## Customizing
-
-You can start editing this template by modifying the files in the `/src` folder. The site will auto-update as you edit these files.
-
-## Asterisk ARI integration guide
-
-Use the checklist below to connect the outbound dialer to an Asterisk instance via ARI. The application assumes a modern Asterisk build (18+) with ARI, PJSIP and Stasis enabled.
-
-1. **Enable ARI in Asterisk**  
-   - In `ari.conf`, set `enabled = yes`, `pretty = yes`, `allowed_origins = *` (or lock to your domains).  
-   - Add a user block (e.g. `[lux]`) with `type = user`, `read_only = no`, `password = <strong-password>`.
-
-2. **Expose ARI over HTTPS**  
-   - Proxy `/ari` through nginx or caddy with TLS.  
-   - Note the base URL such as `https://pbx.example.com/ari`.
-
-3. **Create a Stasis application**  
-   - In `ari.conf`, ensure `app = spotlight` matches your `ARI_APPLICATION`.  
-   - In `extensions.conf` (or your PJSIP dialplan), route outbound calls into Stasis:  
-     ```
-     [outbound]
-     exten => _X.,1,NoOp(Outbound via Spotlight)
-       same => n,Stasis(spotlight,${ARG1},${ARG2},${ARG3})
-     ```
-     The arguments will receive `campaign_id`, `lead_id`, `session_id`, `flow_id`, `flow_version` respectively.
-
-4. **Configure SIP trunks**  
-   - Create PJSIP endpoints named to match the `outboundUri` or `domain` fields you enter in the admin UI.  
-   - If authentication is required, store credentials in the route metadata and configure PJSIP registration on the PBX.
-
-5. **Set backend environment variables**  
-   Add the following to `.env.local` (or your deployment secrets):
+1. Update packages and install dependencies:
+   ```bash
+   sudo apt update
+   sudo apt install -y build-essential git curl wget ufw \
+     asterisk asterisk-dev asterisk-config \
+     libttspico-utils nodejs npm
    ```
-   ARI_BASE_URL=https://pbx.example.com/ari
-   ARI_USERNAME=lux
-   ARI_PASSWORD=replace-with-ari-password
-   ARI_APPLICATION=spotlight
-   ARI_CONTEXT=outbound
-   ARI_EXTENSION=s
-   ARI_INTERNAL_TOKEN=replace-with-long-random-string
-   ASTERISK_BRIDGE_URL=http://192.210.140.80:4000
-   ASTERISK_BRIDGE_TOKEN=replace-with-bridge-token
+2. Optional but recommended: enable the firewall while allowing SIP, RTP, and ARI traffic. Adjust the ports to match your carrier:
+   ```bash
+   sudo ufw allow 22/tcp
+   sudo ufw allow 5060/udp
+   sudo ufw allow 10000:20000/udp
+   sudo ufw allow 8088/tcp
+   sudo ufw enable
    ```
-   `ARI_INTERNAL_TOKEN` secures the internal endpoints the PBX calls when it needs call-flow definitions.
-   `ASTERISK_BRIDGE_URL` and `ASTERISK_BRIDGE_TOKEN` point to the bridge service described in `asterisk-bridge/README.md`.
 
-6. **Webhook endpoints**  
-   - `POST /api/webhooks/ari` receives status updates (`call.answered`, `call.completed`, etc.) from your middleware or dialplan. Pass `sessionId`, optional `dtmf`, `durationSeconds`, `recordingUrl`, `costCents`.  
-   - `GET /api/ari/sessions/:sessionId` (requires header `x-ari-token`) returns the call session, campaign metadata, and the flow definition snapshot for the PBX to execute.
+## 2. Configure Asterisk for ARI control
 
-7. **Runtime expectations**  
-   - Every campaign reserves $0.10 per lead (change via `RATE_PER_1000_LEADS_CENTS` in `lib/flows.ts`) when the session is created. Ensure user balances in the admin panel are topped up before launching.  
-   - Call sessions are throttled according to `callsPerMinute` and `maxConcurrentCalls`. Adjust these in the start page or admin dashboard to match your trunk capacity.
+All configuration files live in `/etc/asterisk`. Create backup copies before editing.
 
-8. **PBX application logic**  
-   - Inside your ARI/Stasis handler, fetch the session payload from `GET /api/ari/sessions/:id`, execute the steps described in the `flow.definition`, and report final status back to `POST /api/webhooks/ari`.  
-   - The flow definition contains ordered nodes (`play`, `gather`, `dial`, `pause`, `hangup`). Respect `next` and `defaultNext` branches to reproduce the IVR exactly as designed in the UI.
+### 2.1 Enable ARI over HTTP
 
-9. **Testing checklist**  
-   - Create a SIP route in the admin panel and ensure dialing the trunk from the PBX succeeds.  
-   - Build a flow in the call-flow atelier, export JSON if needed for manual review.  
-   - Launch a small campaign from `/start`, upload a few leads, and verify calls reach the callee with the configured caller ID and prompts.  
-   - Monitor the admin dashboard for real-time session updates and balance debits.
+Edit `http.conf` and ensure the following block is present:
+```
+[general]
+enabled = yes
+bindaddr = 0.0.0.0
+bindport = 8088
+tlsenable = no
+```
 
-Following the steps above ensures the web application, payment ledger, and PBX remain in sync and every call uses the exact flow created in the UI.
+### 2.2 Configure ARI credentials
 
-## License
+Create or edit `ari.conf`:
+```
+[general]
+enabled = yes
+pretty = yes
+allowed_origins = *
 
-This site template is a commercial product and is licensed under the [Tailwind Plus license](https://tailwindcss.com/plus/license).
+[spotlight]
+type = user
+read_only = no
+password = replace-with-ari-password
+```
+Replace the password with a strong value and keep it for the `.env` file later.
 
-## Learn more
+### 2.3 Prepare PJSIP includes
 
-To learn more about the technologies used in this site template, see the following resources:
+Ensure `pjsip.conf` loads dynamic snippets. Append the following near the end of the file:
+```
+#include pjsip.d/*.conf
+```
 
-- [Tailwind CSS](https://tailwindcss.com/docs) - the official Tailwind CSS documentation
-- [Next.js](https://nextjs.org/docs) - the official Next.js documentation
-- [Headless UI](https://headlessui.dev) - the official Headless UI documentation
-- [MDX](https://mdxjs.com) - the MDX documentation
+Create the directory and set permissions:
+```bash
+sudo mkdir -p /etc/asterisk/pjsip.d
+sudo chown asterisk:asterisk /etc/asterisk/pjsip.d
+```
+
+### 2.4 Dialplan entry for outbound campaigns
+
+Add an outbound Stasis handler in `extensions.conf`:
+```
+[outbound]
+exten => _X.,1,NoOp(Outbound via Campaign)
+ same => n,Stasis(spotlight,${ARG1},${ARG2},${ARG3},${ARG4},${ARG5})
+ same => n,Hangup()
+```
+
+Restart or reload Asterisk so the new configuration is active:
+```bash
+sudo systemctl restart asterisk
+```
+
+## 3. Directory layout for media
+
+Create a dedicated sounds directory that the bridge will manage:
+```bash
+sudo mkdir -p /var/lib/asterisk/sounds/spotlight/cache
+sudo chown -R asterisk:asterisk /var/lib/asterisk/sounds/spotlight
+```
+
+Ensure Asterisk has write access because the bridge stores cached audio prompts and synthesized TTS files inside `cache/`.
+
+## 4. Install the bridge service
+
+1. Copy the `asterisk-bridge` folder from your repository to the VPS, e.g.:
+   ```bash
+   git clone https://your-repo.git
+   cd your-repo/asterisk-bridge
+   ```
+2. Install dependencies and build the service:
+   ```bash
+   npm install
+   npm run build
+   ```
+3. Create the environment file:
+   ```bash
+   cp .env.example .env
+   ```
+   Update the values:
+   - `HTTP_PORT`: listening port for the bridge API (default 4000).
+   - `BRIDGE_TOKEN`: shared secret used by the Next.js panel when syncing trunks.
+   - `PANEL_BASE_URL`: base URL of your panel, e.g. `http://panel.internal:3000`.
+   - `PANEL_ARI_TOKEN`: must match `ARI_INTERNAL_TOKEN` in the panel `.env`.
+   - `PANEL_WEBHOOK_URL`: usually `${PANEL_BASE_URL}/api/webhooks/ari`.
+   - `ARI_BASE_URL`: `http://127.0.0.1:8088`.
+   - `ARI_USERNAME` / `ARI_PASSWORD`: credentials from `ari.conf`.
+   - `ARI_APPLICATION`: `spotlight`.
+   - `ASTERISK_PJSIP_DIR`: `/etc/asterisk/pjsip.d`.
+   - `ASTERISK_SOUNDS_DIR`: `/var/lib/asterisk/sounds/spotlight`.
+   - `SOUNDS_CACHE_DIR`: `/var/lib/asterisk/sounds/spotlight/cache`.
+   - `ASTERISK_TRANSPORT`: transport section name defined in `pjsip.conf` (commonly `transport-udp`).
+   - `ASTERISK_CONTEXT`: dialplan context that runs `Stasis`, e.g. `outbound`.
+   - `ASTERISK_CODECS`: comma-separated list supported by your carrier, such as `ulaw,alaw`.
+   - `DEFAULT_RING_TIMEOUT` and `DEFAULT_DIAL_TIMEOUT`: seconds before the bridge gives up on ringing or agent pickup.
+
+4. Test the bridge manually:
+   ```bash
+   npm run start
+   ```
+   You should see Fastify listening on the configured port. Use `Ctrl+C` to stop once verified.
+
+## 5. Run the bridge as a system service
+
+Create a systemd unit at `/etc/systemd/system/asterisk-bridge.service`:
+```
+[Unit]
+Description=Spotlight Asterisk Bridge
+After=network.target asterisk.service
+
+[Service]
+Type=simple
+User=asterisk
+Group=asterisk
+WorkingDirectory=/path/to/asterisk-bridge
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/node dist/index.js
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Replace `/path/to/asterisk-bridge` with the actual directory. Reload systemd and start the service:
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable asterisk-bridge
+sudo systemctl start asterisk-bridge
+sudo systemctl status asterisk-bridge
+```
+
+## 6. Connect the Next.js panel
+
+Update your panel `.env.local` (or deployment secrets) with the bridge endpoint:
+```
+ASTERISK_BRIDGE_URL=http://192.210.140.80:4000
+ASTERISK_BRIDGE_TOKEN=the-same-token-from-bridge-env
+```
+
+Restart the Next.js API server after changing environment variables. When an administrator creates, updates, or deletes a SIP route in the panel, the backend now pushes the details to `http://192.210.140.80:4000/api/trunks/:id`.
+
+The campaign runner continues to originate calls directly against Asterisk using ARI. During each call the bridge fetches the flow definition from the panel, executes the nodes (`play`, `gather`, `dial`, `pause`, `hangup`), and posts status updates back to `/api/webhooks/ari`. TTS prompts rely on `pico2wave`, so confirm the package is installed and the Asterisk sounds directory is writable.
+
+## 7. Verification checklist
+
+1. `curl http://127.0.0.1:8088/ari/ping` should return `{"ping":"pong"}` using the ARI credentials.
+2. `curl http://192.210.140.80:4000/healthz` should return `{"ok":true}`.
+3. In the panel, add a SIP route. Confirm `/etc/asterisk/pjsip.d/route-<id>.conf` appears and `asterisk -rx "pjsip show endpoint bridge-<id>"` succeeds.
+4. Launch a small campaign and confirm the callee hears the configured flow prompts, DTMF is captured, and campaign metrics update.
+
+The Asterisk bridge and the panel now work together without any HTTPS requirement, using plain HTTP between servers. Always secure access at the network layer (VPN, firewall rules, or private VLAN) to prevent unauthorized requests.
