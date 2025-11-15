@@ -41,7 +41,10 @@ function renderTemplate(template: string | null | undefined, dialString: string)
   const looksLikeChannel = /^[A-Za-z0-9]+\/.+/.test(normalized);
   const looksLikeUri = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(normalized) || normalized.includes("@");
   if (looksLikeChannel || looksLikeUri) {
-    return normalized;
+    if (looksLikeChannel) return normalized;
+    const hasScheme = /^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(normalized);
+    const uri = hasScheme ? normalized : `sip:${normalized}`;
+    return `PJSIP/${uri}`;
   }
   return null;
 }
