@@ -35,7 +35,7 @@ function metadataTemplate(route: RouteLike) {
 
 type TemplateResult =
   | { type: "channel"; value: string }
-  | { type: "sipUri"; user: string; host?: string };
+  | { type: "sipUri"; scheme: "sip" | "sips"; user: string; host?: string };
 
 function renderTemplate(template: string | null | undefined, dialString: string): TemplateResult | null {
   if (!template) return null;
@@ -46,13 +46,13 @@ function renderTemplate(template: string | null | undefined, dialString: string)
     return { type: "channel", value: normalized };
   }
 
-  const sipMatch = normalized.match(/^sips?:([^@]+)@(.+)$/i);
+  const sipMatch = normalized.match(/^(sips?):([^@]+)@(.+)$/i);
   if (sipMatch) {
-    return { type: "sipUri", user: sipMatch[1], host: sipMatch[2] };
+    return { type: "sipUri", scheme: sipMatch[1].toLowerCase() as "sip" | "sips", user: sipMatch[2], host: sipMatch[3] };
   }
   const genericMatch = normalized.includes("@") ? normalized.match(/^([^@]+)@(.+)$/) : null;
   if (genericMatch) {
-    return { type: "sipUri", user: genericMatch[1], host: genericMatch[2] };
+    return { type: "sipUri", scheme: "sip", user: genericMatch[1], host: genericMatch[2] };
   }
   return null;
 }
@@ -64,7 +64,10 @@ function buildEndpoint(route: RouteLike, dialString: string) {
   }
   if (template?.type === "sipUri") {
     const safeId = toSafeId(route.id);
-    return `PJSIP/bridge-${safeId}/${template.user}`;
+    const fallbackHost = route.domain.replace(/^sips?:\/\//i, "").replace(/^sips?:/i, "");
+    const host = template.host || fallbackHost;
+    const target = host ? `${template.scheme}:${template.user}@${host}` : `${template.scheme}:${template.user}`;
+    return `PJSIP/bridge-${safeId}/${target}`;
   }
   if (route.domain.includes("/")) {
     return `${route.domain}${dialString}`;
