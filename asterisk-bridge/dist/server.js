@@ -1,6 +1,7 @@
 import Fastify from "fastify";
 import { config } from "./config.js";
 import { startFlowRunner } from "./flowRunner.js";
+import { originateCall } from "./dialer.js";
 import { trunkManager } from "./trunkManager.js";
 function validateToken(request) {
     const header = request.headers["x-bridge-token"] ?? request.headers["X-Bridge-Token"];
@@ -49,6 +50,21 @@ export async function startServer() {
     app.delete("/api/trunks/:id", async (request, reply) => {
         await trunkManager.remove(request.params.id);
         reply.send({ ok: true });
+    });
+    app.post("/api/calls", async (request, reply) => {
+        const payload = request.body;
+        if (!payload?.route || !payload.dialString || !payload.callerId) {
+            reply.code(400).send({ error: "Missing call parameters" });
+            return;
+        }
+        try {
+            const result = await originateCall(payload);
+            reply.send(result);
+        }
+        catch (error) {
+            request.log.error({ err: error, routeId: payload.route?.id, dialString: payload.dialString }, "Call originate failed");
+            reply.code(502).send({ error: error?.message ?? "Unable to place call" });
+        }
     });
     await startFlowRunner();
     await app.listen({ port: config.httpPort, host: "0.0.0.0" });
