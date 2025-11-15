@@ -202,6 +202,17 @@ The Asterisk bridge and the panel now work together without any HTTPS requiremen
 7. When the port is still closed, run `sudo ss -ltnp | grep 8088` on the PBX to confirm Asterisk is listening and no other service occupies the port. Pair this with packet captures (`sudo tcpdump -nn -i eth0 port 8088`) if you need to prove the traffic never arrives.
 8. `radcli: rc_read_config` warnings during `systemctl status asterisk` are harmless and unrelated to ARI; they can be ignored unless you need Radius accounting.
 
+### ARI endpoint returns 404 on `/ari/ping`
+
+1. Make sure the ARI modules are loaded: `sudo asterisk -rx "module show like ari"`. You should see `res_ari.so`, `res_ari_applications.so`, and `res_ari_events.so`.
+2. If they are listed as `Not Running`, load them manually:
+   - `sudo asterisk -rx "module load res_ari.so"`
+   - `sudo asterisk -rx "module load res_ari_applications.so"`
+   - `sudo asterisk -rx "module load res_ari_events.so"`
+   Add `load => res_ari.so` (etc.) to `/etc/asterisk/modules.conf` or ensure `autoload=yes` so they persist across restarts.
+3. Confirm `ari.conf` includes `applications = spotlight` (or `app = spotlight` on older releases) inside the `[general]` block and the `[spotlight]` user block. Reload with `sudo asterisk -rx "core reload"`.
+4. Retest locally: `curl -u spotlight:password http://127.0.0.1:8088/ari/ping`. Once it returns `{"ping":"pong"}`, retry from the bridge host.
+
 ### Bridge fails with `ERR_MODULE_NOT_FOUND: .../dist/server`
 
 1. Always compile the TypeScript sources before running `npm run start`:  
