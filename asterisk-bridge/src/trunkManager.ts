@@ -1,7 +1,7 @@
 import { promises as fs } from "fs";
 import { join } from "path";
-import { config } from "./config";
-import { hashKey, runCommand } from "./utils";
+import { config } from "./config.js";
+import { hashKey, runCommand } from "./utils.js";
 
 export type TrunkPayload = {
   id: string;

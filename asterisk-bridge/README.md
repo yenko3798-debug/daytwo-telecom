@@ -179,9 +179,49 @@ The campaign runner continues to originate calls directly against Asterisk using
 
 ## 7. Verification checklist
 
-1. `curl http://127.0.0.1:8088/ari/ping` should return `{"ping":"pong"}` using the ARI credentials.
+1. `curl http://127.0.0.1:8088/ari/asterisk/ping` should return `{"ping":"pong"}` using the ARI credentials.
 2. `curl http://192.210.140.80:4000/healthz` should return `{"ok":true}`.
 3. In the panel, add a SIP route. Confirm `/etc/asterisk/pjsip.d/route-<id>.conf` appears and `asterisk -rx "pjsip show endpoint bridge-<id>"` succeeds.
 4. Launch a small campaign and confirm the callee hears the configured flow prompts, DTMF is captured, and campaign metrics update.
 
 The Asterisk bridge and the panel now work together without any HTTPS requirement, using plain HTTP between servers. Always secure access at the network layer (VPN, firewall rules, or private VLAN) to prevent unauthorized requests.
+
+## 8. Troubleshooting ARI connectivity and bridge startup
+
+### ARI port refuses connections (`ECONNREFUSED ...:8088`)
+
+1. Make sure Asterisk is running: `sudo systemctl status asterisk`. Start or restart it when needed with `sudo systemctl restart asterisk`.
+2. Confirm ARI HTTP binding in `/etc/asterisk/http.conf` contains `enabled = yes`, `bindaddr = 0.0.0.0`, and `bindport = 8088`. Reload Asterisk after editing with `sudo asterisk -rx "core reload"`.
+3. Check the live status from the Asterisk CLI: `sudo asterisk -rx "http show status"`. It should report `Enabled` and `Server Enabled and Bound to 0.0.0.0:8088`.
+4. Verify credentials defined in `/etc/asterisk/ari.conf` (user and password) match the `.env` values. Keep the application mapping in `stasis.conf` rather than `ari.conf`.
+5. Test locally on the PBX first:  
+    `curl -u spotlight:your-password http://127.0.0.1:8088/ari/asterisk/ping`  
+   If this fails, re-check steps 2–4. If it works locally, test from the remote host running the bridge:  
+    `curl -u spotlight:your-password http://107.174.63.45:8088/ari/asterisk/ping`.
+6. If remote access fails but localhost succeeds, open the firewall: `sudo ufw allow 8088/tcp` (or update security groups/NAT rules). Some providers block uncommon ports until explicitly allowed.
+7. When the port is still closed, run `sudo ss -ltnp | grep 8088` on the PBX to confirm Asterisk is listening and no other service occupies the port. Pair this with packet captures (`sudo tcpdump -nn -i eth0 port 8088`) if you need to prove the traffic never arrives.
+8. `radcli: rc_read_config` warnings during `systemctl status asterisk` are harmless and unrelated to ARI; they can be ignored unless you need Radius accounting.
+
+### ARI endpoint returns 404 on `/ari/asterisk/ping`
+
+1. Make sure the ARI modules are loaded: `sudo asterisk -rx "module show like ari"`. You should see `res_ari.so`, `res_ari_applications.so`, and `res_ari_events.so`.
+2. If they are listed as `Not Running`, load them manually:
+   - `sudo asterisk -rx "module load res_ari.so"`
+   - `sudo asterisk -rx "module load res_ari_applications.so"`
+   - `sudo asterisk -rx "module load res_ari_events.so"`
+   Add `load => res_ari.so` (etc.) to `/etc/asterisk/modules.conf` or ensure `autoload=yes` so they persist across restarts.
+3. On some Debian/Ubuntu builds, `modules.conf` ships with explicit `noload = res_ari.so` lines. Remove any `noload` entries for `res_ari*`, keep `autoload=yes`, then run `sudo asterisk -rx "core restart now"` so Asterisk reloads with the modules active.
+4. Define your ARI applications in `/etc/asterisk/stasis.conf` instead of `ari.conf`. Example:
+   ```
+   [applications]
+   spotlight=spotlight-handler
+   ```
+   Replace `spotlight-handler` with your actual handler module or dialplan entry, then reload with `sudo asterisk -rx "core reload"`.
+5. Retest locally: `curl -u spotlight:password http://127.0.0.1:8088/ari/asterisk/ping`. Once it returns `{"ping":"pong"}`, retry from the bridge host.
+
+### Bridge fails with `ERR_MODULE_NOT_FOUND: .../dist/server`
+
+1. Always compile the TypeScript sources before running `npm run start`:  
+   `npm install` (first time) → `npm run build` → `npm run start`.
+2. `npm run dev` uses `tsx` to execute `src/index.ts` directly, so it works without the `dist` folder. The production `start` script expects `dist/server.js`; if the file is missing, delete `dist/`, re-run `npm run build`, and start again.
+3. When deploying with systemd, keep `WorkingDirectory` pointing to the folder that contains the freshly built `dist/` directory. Restart the service after every deploy to load the new build.
