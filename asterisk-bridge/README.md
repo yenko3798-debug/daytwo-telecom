@@ -191,12 +191,16 @@ The Asterisk bridge and the panel now work together without any HTTPS requiremen
 ### ARI port refuses connections (`ECONNREFUSED ...:8088`)
 
 1. Make sure Asterisk is running: `sudo systemctl status asterisk`. Start or restart it when needed with `sudo systemctl restart asterisk`.
-2. Confirm ARI HTTP binding in `/etc/asterisk/http.conf` contains `enabled = yes`, `bindaddr = 0.0.0.0`, and `bindport = 8088`. Reload Asterisk after editing.
-3. Verify credentials defined in `/etc/asterisk/ari.conf` (user, password, and `app = spotlight`) match the `.env` values. Use `asterisk -rx "core show settings"` to ensure the file is loading with the expected permissions.
-4. From the same host where `npm run dev` is running, test the endpoint directly:  
-   `curl -u spotlight:your-password http://107.174.63.45:8088/ari/ping`.  
-   You should see `{"ping":"pong"}`. If the request times out internally but works from localhost, open the firewall or add a reverse proxy/VPN so the development box can reach port `8088`.
-5. If the port is still closed, run `sudo ss -ltnp | grep 8088` on the PBX to confirm Asterisk is listening and no firewall (UFW, security groups, router ACLs) is blocking it.
+2. Confirm ARI HTTP binding in `/etc/asterisk/http.conf` contains `enabled = yes`, `bindaddr = 0.0.0.0`, and `bindport = 8088`. Reload Asterisk after editing with `sudo asterisk -rx "core reload"`.
+3. Check the live status from the Asterisk CLI: `sudo asterisk -rx "http show status"`. It should report `Enabled` and `Server Enabled and Bound to 0.0.0.0:8088`.
+4. Verify credentials defined in `/etc/asterisk/ari.conf` (user, password, and `app = spotlight`) match the `.env` values. Run `sudo asterisk -rx "ari show apps"` to ensure the application exists.
+5. Test locally on the PBX first:  
+   `curl -u spotlight:your-password http://127.0.0.1:8088/ari/ping`  
+   If this fails, re-check steps 2–4. If it works locally, test from the remote host running the bridge:  
+   `curl -u spotlight:your-password http://107.174.63.45:8088/ari/ping`.
+6. If remote access fails but localhost succeeds, open the firewall: `sudo ufw allow 8088/tcp` (or update security groups/NAT rules). Some providers block uncommon ports until explicitly allowed.
+7. When the port is still closed, run `sudo ss -ltnp | grep 8088` on the PBX to confirm Asterisk is listening and no other service occupies the port. Pair this with packet captures (`sudo tcpdump -nn -i eth0 port 8088`) if you need to prove the traffic never arrives.
+8. `radcli: rc_read_config` warnings during `systemctl status asterisk` are harmless and unrelated to ARI; they can be ignored unless you need Radius accounting.
 
 ### Bridge fails with `ERR_MODULE_NOT_FOUND: .../dist/server`
 
