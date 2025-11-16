@@ -139,6 +139,33 @@ function loadPlaybackMedia(playback) {
     }
     return task;
 }
+function normalizeHangupCause(reason) {
+    if (typeof reason === "number" && Number.isFinite(reason)) {
+        return reason;
+    }
+    if (typeof reason === "string") {
+        const value = reason.trim().toLowerCase();
+        if (!value) {
+            return undefined;
+        }
+        const mapped = {
+            normal: 16,
+            completed: 16,
+            busy: 17,
+            congestion: 34,
+            rejected: 21,
+            noanswer: 19,
+        };
+        if (mapped[value] !== undefined) {
+            return mapped[value];
+        }
+        const parsed = Number(value);
+        if (!Number.isNaN(parsed)) {
+            return parsed;
+        }
+    }
+    return undefined;
+}
 async function warmFlowMedia(flow) {
     const tasks = [];
     for (const node of flow.nodes) {
@@ -384,8 +411,10 @@ async function runFlow(state) {
             }
             case "hangup": {
                 state.completed = true;
+                const cause = normalizeHangupCause(node.reason);
+                const params = cause !== undefined ? { cause } : {};
                 await new Promise((resolve) => {
-                    state.channel.hangup({ reason: node.reason ?? "completed" }, () => resolve());
+                    state.channel.hangup(params, () => resolve());
                 }).catch(() => { });
                 return;
             }

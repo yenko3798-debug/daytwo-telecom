@@ -65,7 +65,7 @@ type PauseNode = FlowNodeBase & {
 
 type HangupNode = FlowNodeBase & {
   type: "hangup";
-  reason?: string;
+  reason?: string | number;
 };
 
 type FlowNode = PlayNode | GatherNode | DialNode | PauseNode | HangupNode;
@@ -282,6 +282,34 @@ function loadPlaybackMedia(playback: Playback) {
     playbackMediaCache.set(key, task);
   }
   return task;
+}
+
+function normalizeHangupCause(reason?: string | number) {
+  if (typeof reason === "number" && Number.isFinite(reason)) {
+    return reason;
+  }
+  if (typeof reason === "string") {
+    const value = reason.trim().toLowerCase();
+    if (!value) {
+      return undefined;
+    }
+    const mapped: Record<string, number> = {
+      normal: 16,
+      completed: 16,
+      busy: 17,
+      congestion: 34,
+      rejected: 21,
+      noanswer: 19,
+    };
+    if (mapped[value] !== undefined) {
+      return mapped[value];
+    }
+    const parsed = Number(value);
+    if (!Number.isNaN(parsed)) {
+      return parsed;
+    }
+  }
+  return undefined;
 }
 
 async function warmFlowMedia(flow: FlowDefinition) {
@@ -530,8 +558,10 @@ async function runFlow(state: SessionState) {
       }
       case "hangup": {
         state.completed = true;
+        const cause = normalizeHangupCause(node.reason);
+        const params = cause !== undefined ? { cause } : {};
         await new Promise<void>((resolve) => {
-          state.channel.hangup({ reason: node.reason ?? "completed" }, () => resolve());
+          state.channel.hangup(params, () => resolve());
         }).catch(() => {});
         return;
       }
