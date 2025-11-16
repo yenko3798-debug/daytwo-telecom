@@ -22,47 +22,47 @@ export function PageFrame({
   bleed,
 }: PageFrameProps) {
   return (
-    <div
-      className={clsx(
-        'relative mx-auto w-full max-w-7xl px-4 pb-16 sm:px-6 lg:px-8',
-        bleed && 'max-w-none px-0 sm:px-0 lg:px-0',
-        className,
-      )}
-    >
-      <motion.div
-        initial={{ opacity: 0, y: 24 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.7, ease: 'easeOut' }}
-        className="relative overflow-hidden rounded-[2.75rem] bg-white/70 px-6 py-10 shadow-[0_30px_70px_rgba(15,23,42,0.16)] ring-1 ring-white/60 backdrop-blur-2xl dark:bg-white/10 dark:ring-white/10 sm:px-10 lg:px-14"
+      <div
+        className={clsx(
+          'relative mx-auto w-full max-w-7xl px-4 pb-16 sm:px-6 lg:px-10',
+          bleed && 'max-w-none px-0 sm:px-0 lg:px-0',
+          className,
+        )}
       >
-        <div className="pointer-events-none absolute inset-0">
-          <div className="absolute -top-32 left-12 h-64 w-64 rounded-full bg-emerald-400/20 blur-[100px] dark:bg-emerald-500/20" />
-          <div className="absolute -bottom-40 right-0 h-72 w-72 rounded-full bg-sky-400/20 blur-[140px] dark:bg-sky-500/25" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.8),transparent_65%)] dark:bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.12),transparent_65%)]" />
-        </div>
-        <div className="relative z-10 flex flex-col gap-8 md:flex-row md:items-center md:justify-between">
-          <div className="max-w-2xl">
-            {eyebrow ? (
-              <div className="inline-flex items-center rounded-full border border-white/60 bg-white/60 px-3 py-1 text-xs font-semibold uppercase tracking-[0.28em] text-zinc-500 dark:border-white/15 dark:bg-white/10 dark:text-zinc-300">
-                {eyebrow}
-              </div>
-            ) : null}
-            <h1 className="mt-4 text-3xl font-semibold tracking-tight text-zinc-900 dark:text-white sm:text-4xl">
-              {title}
-            </h1>
-            {description ? (
-              <p className="mt-3 text-base text-zinc-600 dark:text-zinc-300">
-                {description}
-              </p>
+        <motion.div
+          initial={{ opacity: 0, y: 24 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, ease: 'easeOut' }}
+          className="glass-panel relative overflow-hidden rounded-[2.75rem] border-white/15 px-6 py-10 text-[var(--lux-foreground)] sm:px-10 lg:px-14"
+        >
+          <div className="pointer-events-none absolute inset-0 opacity-[0.4]">
+            <div className="absolute -top-32 left-12 h-64 w-64 rounded-full bg-[#4EF0B0]/25 blur-[120px]" />
+            <div className="absolute -bottom-40 right-0 h-72 w-72 rounded-full bg-[#a586ff]/25 blur-[140px]" />
+            <div className="absolute inset-0 opacity-[0.25] [background:linear-gradient(120deg,rgba(255,255,255,0.35)_1px,transparent_1px),linear-gradient(300deg,rgba(255,255,255,0.25)_1px,transparent_1px)] [background-size:80px_80px]" />
+          </div>
+          <div className="relative z-10 flex flex-col gap-8 md:flex-row md:items-center md:justify-between">
+            <div className="max-w-2xl">
+              {eyebrow ? (
+                <div className="glass-pill inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold uppercase tracking-[0.28em] text-[var(--lux-muted)]">
+                  {eyebrow}
+                </div>
+              ) : null}
+              <h1 className="mt-4 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+                {title}
+              </h1>
+              {description ? (
+                <p className="mt-3 text-base text-[var(--lux-muted)]">
+                  {description}
+                </p>
+              ) : null}
+            </div>
+            {actions ? (
+              <div className="flex flex-wrap items-center gap-3">{actions}</div>
             ) : null}
           </div>
-          {actions ? (
-            <div className="flex flex-wrap items-center gap-3">{actions}</div>
-          ) : null}
-        </div>
-      </motion.div>
-      <div className="relative z-10 mt-10 space-y-6">{children}</div>
-    </div>
+        </motion.div>
+        <div className="relative z-10 mt-10 space-y-6">{children}</div>
+      </div>
   )
 }
 
@@ -95,7 +95,7 @@ export function MotionCard({
       transition={{ duration: 0.6, ease: 'easeOut', delay }}
       whileHover={{ y: -8 }}
       className={clsx(
-        'group relative overflow-hidden rounded-[2rem] border border-white/50 bg-white/70 p-6 shadow-[0_24px_60px_rgba(15,23,42,0.15)] backdrop-blur-xl transition-all duration-300 hover:shadow-[0_30px_75px_rgba(15,23,42,0.18)] dark:border-white/10 dark:bg-white/10 dark:shadow-[0_22px_50px_rgba(3,7,18,0.55)]',
+        'group relative overflow-hidden rounded-[1.8rem] border border-white/10 bg-white/5 p-6 text-[var(--lux-foreground)] shadow-[0_24px_60px_rgba(0,0,0,0.45)] backdrop-blur-2xl transition-all duration-300 hover:border-white/20',
         className,
       )}
     >

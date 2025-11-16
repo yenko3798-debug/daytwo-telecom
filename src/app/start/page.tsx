@@ -453,11 +453,11 @@ export default function StartCampaignPage() {
               <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
                 Campaign name
               </label>
-              <input
-                value={campaignName}
-                onChange={(event) => setCampaignName(event.target.value)}
-                className="mt-1 w-full rounded-xl border border-white/60 bg-white/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40 dark:border-white/10 dark:bg-white/5 dark:text-white"
-              />
+                  <input
+                    value={campaignName}
+                    onChange={(event) => setCampaignName(event.target.value)}
+                    className="glass-input mt-1 w-full text-sm"
+                  />
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
@@ -465,23 +465,23 @@ export default function StartCampaignPage() {
                 <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
                   Caller ID (E.164)
                 </label>
-                <input
-                  value={callerId}
-                  onChange={(event) => setCallerId(event.target.value)}
-                  placeholder="+12125550123"
-                  className="mt-1 w-full rounded-xl border border-white/60 bg-white/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40 dark:border-white/10 dark:bg-white/5 dark:text-white"
-                />
+                  <input
+                    value={callerId}
+                    onChange={(event) => setCallerId(event.target.value)}
+                    placeholder="+12125550123"
+                    className="glass-input mt-1 w-full text-sm"
+                  />
               </div>
               <div>
                 <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
                   Route
                 </label>
-                <select
-                  value={selectedRoute}
-                  onChange={(event) => setSelectedRoute(event.target.value)}
-                  disabled={loadingOptions}
-                  className="mt-1 w-full rounded-xl border border-white/60 bg-white/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40 dark:border-white/10 dark:bg-white/5 dark:text-white"
-                >
+                  <select
+                    value={selectedRoute}
+                    onChange={(event) => setSelectedRoute(event.target.value)}
+                    disabled={loadingOptions}
+                    className="glass-input mt-1 w-full text-sm disabled:opacity-60"
+                  >
                   {routes.map((route) => (
                     <option key={route.id} value={route.id}>
                       {route.name} · {route.provider}
@@ -496,12 +496,12 @@ export default function StartCampaignPage() {
               <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
                 Flow
               </label>
-              <select
-                value={selectedFlow}
-                onChange={(event) => setSelectedFlow(event.target.value)}
-                disabled={loadingOptions}
-                className="mt-1 w-full rounded-xl border border-white/60 bg-white/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40 dark:border-white/10 dark:bg-white/5 dark:text-white"
-              >
+                <select
+                  value={selectedFlow}
+                  onChange={(event) => setSelectedFlow(event.target.value)}
+                  disabled={loadingOptions}
+                  className="glass-input mt-1 w-full text-sm disabled:opacity-60"
+                >
                 {flows.map((flow) => (
                   <option key={flow.id} value={flow.id}>
                     {flow.name}
@@ -518,7 +518,7 @@ export default function StartCampaignPage() {
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
                 rows={3}
-                className="mt-1 w-full rounded-xl border border-white/60 bg-white/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40 dark:border-white/10 dark:bg-white/5 dark:text-white"
+                    className="glass-input mt-1 w-full text-sm"
               />
             </div>
 
@@ -533,7 +533,7 @@ export default function StartCampaignPage() {
                   min={1}
                   max={600}
                   onChange={(event) => setCallsPerMinute(Number(event.target.value))}
-                  className="mt-1 w-full rounded-xl border border-white/60 bg-white/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40 dark:border-white/10 dark:bg-white/5 dark:text-white"
+                    className="glass-input mt-1 w-full text-sm"
                 />
               </div>
               <div>
@@ -546,7 +546,7 @@ export default function StartCampaignPage() {
                   min={1}
                   max={200}
                   onChange={(event) => setMaxConcurrentCalls(Number(event.target.value))}
-                  className="mt-1 w-full rounded-xl border border-white/60 bg-white/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40 dark:border-white/10 dark:bg-white/5 dark:text-white"
+                    className="glass-input mt-1 w-full text-sm"
                 />
               </div>
               <div>
@@ -559,12 +559,12 @@ export default function StartCampaignPage() {
                   min={10}
                   max={120}
                   onChange={(event) => setRingTimeout(Number(event.target.value))}
-                  className="mt-1 w-full rounded-xl border border-white/60 bg-white/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40 dark:border-white/10 dark:bg-white/5 dark:text-white"
+                    className="glass-input mt-1 w-full text-sm"
                 />
               </div>
             </div>
 
-            <div className="rounded-2xl border border-white/60 bg-white/60 p-4 dark:border-white/10 dark:bg-white/5">
+            <div className="glass-card rounded-2xl p-4">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
                   <div className="text-sm font-semibold text-zinc-700 dark:text-zinc-200">
@@ -574,7 +574,7 @@ export default function StartCampaignPage() {
                     Paste numbers, upload a file, or enter manually.
                   </div>
                 </div>
-                <label className="inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/70 px-3 py-1.5 text-xs text-zinc-600 transition hover:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10">
+                <label className="glass-pill inline-flex items-center gap-2 px-3 py-1.5 text-xs text-white transition hover:bg-white/20">
                   <ICONS.Upload className="h-4 w-4" />
                   Upload file
                   <input
@@ -595,7 +595,7 @@ export default function StartCampaignPage() {
                   onChange={(event) => setRawLeadText(event.target.value)}
                   rows={8}
                   placeholder="Paste phone numbers or free-form text, we'll extract valid MSISDNs automatically."
-                  className="mt-3 w-full rounded-xl border border-white/60 bg-white/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40 dark:border-white/10 dark:bg-white/5 dark:text-white"
+                  className="glass-input mt-3 w-full text-sm"
                 />
 
                 <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-zinc-500 dark:text-zinc-400">
@@ -614,11 +614,11 @@ export default function StartCampaignPage() {
                 <ICONS.Save className="h-4 w-4" />
                 {creating ? "Creating..." : "Create campaign"}
               </button>
-              <button
-                onClick={handleUploadLeads}
-                disabled={!campaignReady || uploading || leads.length === 0}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/60 bg-white/70 px-4 py-2 text-sm font-semibold text-zinc-700 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
-              >
+                <button
+                  onClick={handleUploadLeads}
+                  disabled={!campaignReady || uploading || leads.length === 0}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
+                >
                 <ICONS.Upload className="h-4 w-4" />
                 {uploading ? "Uploading..." : "Upload leads"}
               </button>
@@ -632,10 +632,10 @@ export default function StartCampaignPage() {
               </button>
             </div>
 
-            <button
-              onClick={resetState}
-              className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/60 bg-white/60 px-4 py-2 text-sm text-zinc-600 transition hover:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
-            >
+              <button
+                onClick={resetState}
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm text-[var(--lux-muted)] transition hover:bg-white/10"
+              >
               Reset
             </button>
           </div>
@@ -674,7 +674,7 @@ export default function StartCampaignPage() {
                   <span>${(leadUploadResult * RATE_PER_LEAD).toFixed(2)}</span>
                 </div>
               </div>
-              <div className="rounded-2xl border border-white/60 bg-white/60 p-4 dark:border-white/10 dark:bg-white/5">
+                <div className="glass-card rounded-2xl p-4">
                 <div className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
                   Performance
                 </div>
@@ -684,7 +684,7 @@ export default function StartCampaignPage() {
                   <span>DTMF: {campaign.totals.dtmf}</span>
                 </div>
               </div>
-                <div className="rounded-2xl border border-white/60 bg-white/60 p-4 dark:border-white/10 dark:bg-white/5">
+                <div className="glass-card rounded-2xl p-4">
                   <div className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
                     <span>DTMF responses</span>
                     <button
@@ -705,7 +705,7 @@ export default function StartCampaignPage() {
                   ) : (
                     <div className="space-y-2">
                       {dtmfResponses.slice(0, 5).map((entry) => (
-                        <div key={entry.id} className="rounded-xl border border-white/50 bg-white/70 p-3 text-sm dark:border-white/10 dark:bg-white/5">
+                        <div key={entry.id} className="rounded-xl border border-white/10 bg-white/5 p-3 text-sm text-white/90">
                           <div className="flex items-center justify-between">
                             <span className="font-semibold text-zinc-700 dark:text-zinc-200">
                               {entry.lead?.phoneNumber ?? entry.dialedNumber ?? "Unknown"}
@@ -728,7 +728,7 @@ export default function StartCampaignPage() {
                 </div>
             </div>
           ) : (
-            <div className="rounded-2xl border border-dashed border-white/60 bg-white/60 p-6 text-sm text-zinc-500 dark:border-white/10 dark:bg-white/5 dark:text-zinc-400">
+            <div className="rounded-2xl border border-dashed border-white/15 bg-white/5 p-6 text-sm text-[var(--lux-muted)]">
               Campaign metrics will appear once you create a campaign.
             </div>
           )}
