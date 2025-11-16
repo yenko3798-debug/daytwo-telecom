@@ -21,7 +21,7 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en" className="h-full antialiased" suppressHydrationWarning>
-      <body className="min-h-screen bg-[#f4f2ed] font-sans text-zinc-900 antialiased transition-colors duration-300 dark:bg-[#05070c] dark:text-zinc-100">
+      <body className="min-h-screen bg-gradient-to-b from-[#f9f6f1] via-[#f2ece3] to-[#ebe3d8] font-sans text-[#1f2431] antialiased transition-colors duration-300 dark:from-[#040609] dark:via-[#060910] dark:to-[#0a111a] dark:text-slate-100">
         <Providers>
           <Layout>{children}</Layout>
         </Providers>

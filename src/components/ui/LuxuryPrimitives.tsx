@@ -33,25 +33,25 @@ export function PageFrame({
         initial={{ opacity: 0, y: 24 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.7, ease: 'easeOut' }}
-        className="relative overflow-hidden rounded-[2.75rem] bg-white/70 px-6 py-10 shadow-[0_30px_70px_rgba(15,23,42,0.16)] ring-1 ring-white/60 backdrop-blur-2xl dark:bg-white/10 dark:ring-white/10 sm:px-10 lg:px-14"
+        className="relative overflow-hidden rounded-[2.5rem] border border-white/60 bg-white/85 px-6 py-10 shadow-[0_30px_70px_rgba(15,23,42,0.14)] backdrop-blur-3xl dark:border-white/10 dark:bg-[#0b111a]/85 dark:shadow-[0_30px_70px_rgba(0,0,0,0.65)] sm:px-10 lg:px-14"
       >
         <div className="pointer-events-none absolute inset-0">
-          <div className="absolute -top-32 left-12 h-64 w-64 rounded-full bg-emerald-400/20 blur-[100px] dark:bg-emerald-500/20" />
-          <div className="absolute -bottom-40 right-0 h-72 w-72 rounded-full bg-sky-400/20 blur-[140px] dark:bg-sky-500/25" />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.8),transparent_65%)] dark:bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.12),transparent_65%)]" />
+          <div className="absolute -top-32 left-12 h-64 w-64 rounded-full bg-amber-200/60 blur-[120px] dark:bg-amber-500/20" />
+          <div className="absolute -bottom-40 right-0 h-72 w-72 rounded-full bg-rose-200/50 blur-[150px] dark:bg-rose-500/20" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.8),transparent_65%)] dark:bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.08),transparent_65%)]" />
         </div>
         <div className="relative z-10 flex flex-col gap-8 md:flex-row md:items-center md:justify-between">
           <div className="max-w-2xl">
             {eyebrow ? (
-              <div className="inline-flex items-center rounded-full border border-white/60 bg-white/60 px-3 py-1 text-xs font-semibold uppercase tracking-[0.28em] text-zinc-500 dark:border-white/15 dark:bg-white/10 dark:text-zinc-300">
+              <div className="inline-flex items-center rounded-full border border-white/60 bg-white/80 px-3 py-1 text-xs font-semibold uppercase tracking-[0.28em] text-[#aa9076] dark:border-white/10 dark:bg-white/5 dark:text-amber-200/80">
                 {eyebrow}
               </div>
             ) : null}
-            <h1 className="mt-4 text-3xl font-semibold tracking-tight text-zinc-900 dark:text-white sm:text-4xl">
+            <h1 className="mt-4 text-3xl font-semibold tracking-tight text-[#1d2331] dark:text-white sm:text-4xl">
               {title}
             </h1>
             {description ? (
-              <p className="mt-3 text-base text-zinc-600 dark:text-zinc-300">
+              <p className="mt-3 text-base text-[#5a6478] dark:text-slate-300">
                 {description}
               </p>
             ) : null}
@@ -74,11 +74,11 @@ type MotionCardProps = {
 }
 
 const glowMap: Record<NonNullable<MotionCardProps['tone']>, string> = {
-  emerald: 'from-emerald-500/20 via-emerald-400/10 to-transparent',
-  violet: 'from-violet-500/15 via-violet-400/10 to-transparent',
-  amber: 'from-amber-400/20 via-amber-300/10 to-transparent',
-  sky: 'from-sky-400/20 via-sky-300/10 to-transparent',
-  neutral: 'from-white/70 via-white/25 to-transparent dark:from-white/10 dark:via-white/5',
+  emerald: 'from-emerald-400/25 via-emerald-200/10 to-transparent dark:from-emerald-400/20',
+  violet: 'from-violet-400/20 via-violet-200/10 to-transparent dark:from-violet-500/20',
+  amber: 'from-amber-400/30 via-amber-200/15 to-transparent dark:from-amber-400/25',
+  sky: 'from-sky-400/25 via-sky-200/10 to-transparent dark:from-sky-400/20',
+  neutral: 'from-white/80 via-white/30 to-transparent dark:from-white/15 dark:via-white/5',
 }
 
 export function MotionCard({
@@ -95,7 +95,7 @@ export function MotionCard({
       transition={{ duration: 0.6, ease: 'easeOut', delay }}
       whileHover={{ y: -8 }}
       className={clsx(
-        'group relative overflow-hidden rounded-[2rem] border border-white/50 bg-white/70 p-6 shadow-[0_24px_60px_rgba(15,23,42,0.15)] backdrop-blur-xl transition-all duration-300 hover:shadow-[0_30px_75px_rgba(15,23,42,0.18)] dark:border-white/10 dark:bg-white/10 dark:shadow-[0_22px_50px_rgba(3,7,18,0.55)]',
+        'group relative overflow-hidden rounded-[2rem] border border-white/60 bg-white/85 p-6 text-[#1f2433] shadow-[0_24px_60px_rgba(15,23,42,0.12)] backdrop-blur-2xl transition-all duration-300 hover:shadow-[0_30px_80px_rgba(15,23,42,0.16)] dark:border-white/10 dark:bg-[#0d131f]/85 dark:text-white dark:shadow-[0_26px_70px_rgba(0,0,0,0.6)]',
         className,
       )}
     >
@@ -119,7 +119,7 @@ export function ShimmerTile({ className }: ShimmerTileProps) {
   return (
     <div
       className={clsx(
-        'lux-shimmer overflow-hidden rounded-2xl bg-white/50 dark:bg-white/10',
+        'lux-shimmer overflow-hidden rounded-2xl bg-white/80 dark:bg-white/5',
         className,
       )}
     />

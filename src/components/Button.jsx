@@ -3,18 +3,18 @@ import clsx from 'clsx'
 
 const variantStyles = {
   primary:
-    'bg-gradient-to-r from-emerald-500 via-emerald-400 to-cyan-400 font-semibold text-slate-950 hover:from-emerald-400 hover:via-emerald-300 hover:to-cyan-300 active:from-emerald-500 active:via-emerald-400 active:to-cyan-400 active:text-slate-900/80 dark:text-slate-950',
+    'bg-amber-400 font-semibold text-[#1f2533] shadow-[0_14px_30px_rgba(249,201,143,0.45)] hover:bg-amber-300 focus-visible:outline-amber-400 active:bg-amber-400/90 dark:bg-amber-300 dark:text-[#1b2130] dark:hover:bg-amber-200',
   secondary:
-    'bg-slate-900/80 font-medium text-slate-100 hover:bg-slate-800 active:bg-slate-900 active:text-slate-300 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-700 dark:active:bg-slate-800 dark:active:text-slate-100/80',
+    'bg-white/80 font-medium text-[#1f2533] shadow-sm ring-1 ring-white/60 hover:bg-white focus-visible:outline-amber-200 dark:bg-white/5 dark:text-white dark:ring-white/15 dark:hover:bg-white/10',
 }
 
 
 export function Button({ variant = 'primary', className, ...props }) {
-  className = clsx(
-    'inline-flex items-center gap-2 justify-center rounded-md py-2 px-3 text-sm outline-offset-2 transition active:transition-none',
-    variantStyles[variant],
-    className,
-  )
+    className = clsx(
+      'inline-flex items-center gap-2 justify-center rounded-xl px-4 py-2 text-sm outline-offset-2 transition active:transition-none',
+      variantStyles[variant],
+      className,
+    )
 
   return typeof props.href === 'undefined' ? (
     <button className={className} {...props} />

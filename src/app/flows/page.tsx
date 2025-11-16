@@ -230,6 +230,11 @@ const NODE_TYPES: Array<{ type: NodeType; label: string; description: string }> 
   { type: "hangup", label: "Hangup", description: "Terminate the call" },
 ];
 
+const inputStyles =
+  "mt-1 w-full rounded-2xl border border-white/40 bg-white/85 px-3 py-2 text-sm text-[#1f2433] shadow-sm focus:outline-none focus:ring-2 focus:ring-amber-400/50 dark:border-white/10 dark:bg-white/5 dark:text-white";
+const panelStyles =
+  "rounded-3xl border border-white/50 bg-white/80 p-4 text-sm text-[#5a6478] shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/5 dark:text-slate-300";
+
 function createNode(type: NodeType): FlowNode {
   const id = `${type}-${Math.random().toString(36).slice(2, 8)}`;
   if (type === "play") {
@@ -285,6 +290,7 @@ export default function FlowBuilderPage() {
   const [flows, setFlows] = useState<FlowRecord[]>([]);
   const [draft, setDraft] = useState<FlowDraft | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeNodeId, setActiveNodeId] = useState<string | null>(null);
   const { push, View: Toasts } = useToast();
   usePageLoading(640);
 
@@ -365,6 +371,19 @@ export default function FlowBuilderPage() {
   useEffect(() => {
     loadFlows();
   }, [loadFlows]);
+
+  useEffect(() => {
+    if (!draft || draft.definition.nodes.length === 0) {
+      setActiveNodeId(null);
+      return;
+    }
+    setActiveNodeId((current) => {
+      if (current && draft.definition.nodes.some((node) => node.id === current)) {
+        return current;
+      }
+      return draft.definition.entry || draft.definition.nodes[0].id;
+    });
+  }, [draft]);
 
   const selectFlow = useCallback(
     (id: string) => {
@@ -641,32 +660,32 @@ export default function FlowBuilderPage() {
       description="Design IVR experiences, control prompts and branching logic, then deploy instantly to your campaigns."
     >
       <Toasts />
-      <div className="grid gap-6 xl:grid-cols-[340px_1fr_320px]">
-        <MotionCard tone="neutral" className="p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-sm font-semibold text-zinc-700 dark:text-zinc-200">Flows</div>
-              <div className="text-xs text-zinc-500 dark:text-zinc-400">
-                Manage reusable call journeys.
+        <div className="grid gap-6 xl:grid-cols-[340px_1fr_320px]">
+          <MotionCard tone="neutral" className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm font-semibold text-[#1f2533] dark:text-white">Flows</div>
+                <div className="text-xs text-[#7a8397] dark:text-slate-400">
+                  Manage reusable call journeys.
+                </div>
               </div>
+              <button
+                onClick={startNewFlow}
+                className="inline-flex items-center gap-2 rounded-full bg-amber-400 px-3 py-1.5 text-xs font-semibold text-[#1f2533] shadow-[0_10px_24px_rgba(249,201,143,0.45)] transition hover:bg-amber-300 dark:bg-amber-300 dark:text-[#1b2130]"
+              >
+                <Icons.Plus className="h-3.5 w-3.5" />
+                New flow
+              </button>
             </div>
-            <button
-              onClick={startNewFlow}
-              className="inline-flex items-center gap-2 rounded-full bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white shadow hover:bg-emerald-600"
-            >
-              <Icons.Plus className="h-3.5 w-3.5" />
-              New flow
-            </button>
-          </div>
 
-          {loading ? (
+            {loading ? (
             <div className="mt-6 space-y-3">
               {Array.from({ length: 4 }).map((_, index) => (
                 <ShimmerTile key={index} className="h-14 rounded-xl" />
               ))}
             </div>
           ) : flows.length === 0 ? (
-            <div className="mt-6 rounded-2xl border border-dashed border-white/60 bg-white/60 p-6 text-sm text-zinc-500 dark:border-white/10 dark:bg-white/5 dark:text-zinc-400">
+              <div className={`${panelStyles} mt-6 border-dashed text-sm text-[#7a8397] dark:text-slate-400`}>
               No flows yet. Create your first call flow to get started.
             </div>
           ) : (
@@ -674,36 +693,36 @@ export default function FlowBuilderPage() {
               {flows.map((flow) => {
                 const isSelected = draft?.id === flow.id && !draft.isNew;
                 const stats = summarizeFlow(flow.definition);
-                return (
-                  <button
+                  return (
+                    <button
                     key={flow.id}
                     onClick={() => selectFlow(flow.id)}
-                    className={`w-full rounded-2xl border px-4 py-3 text-left transition ${
-                      isSelected
-                        ? "border-emerald-400/50 bg-emerald-500/10 ring-2 ring-emerald-400/40 dark:bg-emerald-500/10"
-                        : "border-white/60 bg-white/60 hover:bg-white/90 dark:border-white/10 dark:bg-white/5 dark:hover:bg-white/10"
+                      className={`w-full rounded-2xl border px-4 py-3 text-left transition ${
+                        isSelected
+                          ? "border-amber-400/70 bg-white shadow-[0_16px_32px_rgba(249,201,143,0.35)] dark:border-amber-300/60 dark:bg-white/5"
+                          : "border-white/50 bg-white/75 hover:border-amber-200 dark:border-white/10 dark:bg-white/5"
                     }`}
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <div className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
+                          <div className="text-sm font-semibold text-[#1f2533] dark:text-white">
                           {flow.name}
                         </div>
-                        <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                          <div className="text-xs text-[#7d8699] dark:text-slate-400">
                           {formatTimeAgo(flow.updatedAt)}
                         </div>
                       </div>
                       {flow.isSystem ? (
-                        <span className="rounded-full bg-indigo-500/15 px-2.5 py-1 text-[11px] font-semibold text-indigo-500">
+                          <span className="rounded-full bg-indigo-100 px-2.5 py-1 text-[11px] font-semibold text-indigo-600 dark:bg-indigo-400/10 dark:text-indigo-200">
                           System
                         </span>
                       ) : null}
                     </div>
-                    <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-zinc-500 dark:text-zinc-400">
+                      <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-[#7d8699] dark:text-slate-400">
                       <span>{stats.nodes} nodes</span>
                       {Object.entries(stats.counts).map(([key, value]) => (
                         <span key={key} className="flex items-center gap-1">
-                          <span className="inline-flex h-1.5 w-1.5 rounded-full bg-zinc-300" />
+                            <span className="inline-flex h-1.5 w-1.5 rounded-full bg-[#cfd4e3]" />
                           {key}: {value}
                         </span>
                       ))}
@@ -718,7 +737,6 @@ export default function FlowBuilderPage() {
         <FlowCanvas
           draft={draft}
           loading={loading}
-          push={push}
           moveNode={moveNode}
           duplicateNode={duplicateNode}
           removeNode={removeNode}
@@ -727,103 +745,107 @@ export default function FlowBuilderPage() {
           setEntry={setEntry}
           uploadAudio={uploadAudio}
           handleSave={handleSave}
+          activeNodeId={activeNodeId}
+          onSelectNode={(id) => setActiveNodeId(id)}
         />
 
-        <MotionCard tone="neutral" className="p-6">
-          {!draft ? (
-            <div className="rounded-2xl border border-dashed border-white/60 bg-white/60 p-6 text-sm text-zinc-500 dark:border-white/10 dark:bg-white/5 dark:text-zinc-400">
-              Flow details will appear here once a flow is selected.
-            </div>
-          ) : (
-            <>
-              <div className="space-y-4">
-                <div>
-                  <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
-                    Flow name
-                  </label>
-                  <input
-                    value={draft.name}
-                    onChange={(event) => handleNameChange(event.target.value)}
-                    disabled={disableEditing && !draft.isNew}
-                    className="mt-1 w-full rounded-xl border border-white/60 bg-white/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40 dark:border-white/10 dark:bg-white/5 dark:text-white disabled:cursor-not-allowed disabled:opacity-60"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
-                    Description
-                  </label>
-                  <textarea
-                    value={draft.description}
-                    onChange={(event) => handleDescriptionChange(event.target.value)}
-                    rows={4}
-                    disabled={disableEditing && !draft.isNew}
-                    className="mt-1 w-full resize-none rounded-xl border border-white/60 bg-white/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40 dark:border-white/10 dark:bg-white/5 dark:text-white disabled:cursor-not-allowed disabled:opacity-60"
-                  />
-                </div>
+          <MotionCard tone="neutral" className="p-6">
+            {!draft ? (
+              <div className={`${panelStyles} border-dashed text-sm text-[#7a8397] dark:text-slate-400`}>
+                Flow details will appear here once a flow is selected.
               </div>
-
-              <div className="mt-6 rounded-2xl border border-white/60 bg-white/60 p-4 text-sm dark:border-white/10 dark:bg-white/5">
-                <div className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
-                  Summary
-                </div>
-                <div className="mt-3 grid gap-2 text-xs text-zinc-600 dark:text-zinc-300">
-                  <div className="flex items-center justify-between">
-                    <span>Total nodes</span>
-                    <span>{summary?.nodes ?? 0}</span>
+            ) : (
+              <>
+                <div className="space-y-4">
+                  <div>
+                    <label className="text-xs font-semibold text-[#7d8699] dark:text-slate-400">
+                      Flow name
+                    </label>
+                    <input
+                      value={draft.name}
+                      onChange={(event) => handleNameChange(event.target.value)}
+                      disabled={disableEditing && !draft.isNew}
+                      className={`${inputStyles} disabled:cursor-not-allowed disabled:opacity-60`}
+                    />
                   </div>
-                  {totals
-                    ? Object.entries(totals).map(([type, count]) => (
-                        <div key={type} className="flex items-center justify-between">
-                          <span className="capitalize">{type}</span>
-                          <span>{count}</span>
-                        </div>
-                      ))
-                    : null}
+                  <div>
+                    <label className="text-xs font-semibold text-[#7d8699] dark:text-slate-400">
+                      Description
+                    </label>
+                    <textarea
+                      value={draft.description}
+                      onChange={(event) => handleDescriptionChange(event.target.value)}
+                      rows={4}
+                      disabled={disableEditing && !draft.isNew}
+                      className={`${inputStyles} resize-none disabled:cursor-not-allowed disabled:opacity-60`}
+                    />
+                  </div>
                 </div>
-              </div>
 
-              <div className="mt-6 space-y-2 text-xs text-zinc-500 dark:text-zinc-400">
-                <div className="flex items-center justify-between">
-                  <span>Dirty</span>
-                  <span>{draft.dirty ? "Yes" : "No"}</span>
+                <div className={`${panelStyles} mt-6`}>
+                  <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[#7d8699] dark:text-slate-400">
+                    Summary
+                  </div>
+                  <div className="mt-3 grid gap-2 text-xs text-[#5f6678] dark:text-slate-300">
+                    <div className="flex items-center justify-between">
+                      <span>Total nodes</span>
+                      <span>{summary?.nodes ?? 0}</span>
+                    </div>
+                    {totals
+                      ? Object.entries(totals).map(([type, count]) => (
+                          <div key={type} className="flex items-center justify-between">
+                            <span className="capitalize">{type}</span>
+                            <span>{count}</span>
+                          </div>
+                        ))
+                      : null}
+                  </div>
                 </div>
-                <div className="flex items-center justify-between">
-                  <span>Flow ID</span>
-                  <span>{draft.id ?? "pending"}</span>
-                </div>
-              </div>
 
-              <div className="mt-6 space-y-3">
-                <button
-                  onClick={handleSave}
-                  disabled={draft.saving || (!draft.dirty && !draft.isNew)}
-                  className="w-full rounded-xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {draft.saving ? "Saving..." : "Save flow"}
-                </button>
-                <button
-                  onClick={handleExport}
-                  className="w-full rounded-xl border border-white/60 bg-white/60 px-4 py-2 text-sm font-semibold text-zinc-600 transition hover:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10"
-                >
-                  <span className="inline-flex items-center gap-2">
-                    <Icons.Download className="h-4 w-4" />
-                    Export JSON
-                  </span>
-                </button>
-                <button
-                  onClick={handleDelete}
-                  disabled={!draft.id || draft.isSystem}
-                  className="w-full rounded-xl border border-white/60 bg-white/60 px-4 py-2 text-sm font-semibold text-rose-500 transition hover:bg-white dark:border-white/10 dark:bg-white/5 dark:text-rose-400 dark:hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  <span className="inline-flex items-center gap-2">
-                    <Icons.Trash className="h-4 w-4" />
-                    Delete flow
-                  </span>
-                </button>
-              </div>
-            </>
-          )}
-        </MotionCard>
+                <div className={`${panelStyles} mt-6 space-y-2 text-xs`}>
+                  <div className="flex items-center justify-between text-[#5f6678] dark:text-slate-400">
+                    <span>Dirty</span>
+                    <span className="text-[#1f2533] dark:text-white">{draft.dirty ? "Yes" : "No"}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[#5f6678] dark:text-slate-400">
+                    <span>Flow ID</span>
+                    <span className="font-mono text-[11px] text-[#7d8699] dark:text-slate-400">
+                      {draft.id ?? "pending"}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="mt-6 space-y-3">
+                  <button
+                    onClick={handleSave}
+                    disabled={draft.saving || (!draft.dirty && !draft.isNew)}
+                    className="w-full rounded-2xl bg-amber-400 px-4 py-2 text-sm font-semibold text-[#1f2533] shadow-[0_12px_28px_rgba(249,201,143,0.45)] transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-amber-300 dark:text-[#1b2130]"
+                  >
+                    {draft.saving ? "Saving..." : "Save flow"}
+                  </button>
+                  <button
+                    onClick={handleExport}
+                    className="w-full rounded-2xl border border-white/60 bg-white/85 px-4 py-2 text-sm font-semibold text-[#1f2533] transition hover:border-amber-200 dark:border-white/10 dark:bg-white/5 dark:text-white"
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <Icons.Download className="h-4 w-4" />
+                      Export JSON
+                    </span>
+                  </button>
+                  <button
+                    onClick={handleDelete}
+                    disabled={!draft.id || draft.isSystem}
+                    className="w-full rounded-2xl border border-rose-200/70 bg-rose-50/80 px-4 py-2 text-sm font-semibold text-rose-600 transition hover:border-rose-300 dark:border-rose-400/40 dark:bg-rose-500/10 dark:text-rose-200 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <Icons.Trash className="h-4 w-4" />
+                      Delete flow
+                    </span>
+                  </button>
+                </div>
+              </>
+            )}
+          </MotionCard>
       </div>
     </PageFrame>
   );
@@ -832,7 +854,6 @@ export default function FlowBuilderPage() {
 type FlowCanvasProps = {
   draft: FlowDraft | null;
   loading: boolean;
-  push: (message: string, tone?: ToastItem["tone"]) => void;
   moveNode: (id: string, direction: -1 | 1) => void;
   duplicateNode: (id: string) => void;
   removeNode: (id: string) => void;
@@ -841,12 +862,13 @@ type FlowCanvasProps = {
   setEntry: (id: string) => void;
   uploadAudio: (file: File) => Promise<any>;
   handleSave: () => Promise<void>;
+  activeNodeId: string | null;
+  onSelectNode: (id: string) => void;
 };
 
 function FlowCanvas({
   draft,
   loading,
-  push,
   moveNode,
   duplicateNode,
   removeNode,
@@ -855,185 +877,289 @@ function FlowCanvas({
   setEntry,
   uploadAudio,
   handleSave,
+  activeNodeId,
+  onSelectNode,
 }: FlowCanvasProps) {
   if (!draft) {
     return (
       <MotionCard tone="neutral" className="p-6">
-        <div className="mt-8 rounded-2xl border border-dashed border-white/60 p-6 text-sm text-zinc-500 dark:border-white/10 dark:text-zinc-400">
-          Select a flow or create a new one to begin editing.
+        <div className={`${panelStyles} border-dashed text-center`}>
+          <p className="text-sm">Select a flow or create one to start building.</p>
         </div>
       </MotionCard>
     );
   }
 
   const nodes = draft.definition.nodes;
+  const activeNode =
+    nodes.find((node) => node.id === activeNodeId) ?? nodes[0] ?? null;
+  const destinationOptions = activeNode
+    ? nodes
+        .filter((candidate) => candidate.id !== activeNode.id)
+        .map((candidate) => ({
+          value: candidate.id,
+          label: candidate.name?.trim() || getNodeLabel(candidate),
+        }))
+    : [];
 
   return (
     <MotionCard tone="neutral" className="p-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <div className="text-sm font-semibold text-zinc-700 dark:text-zinc-200">Flow canvas</div>
-          <div className="text-xs text-zinc-500 dark:text-zinc-400">
-            Configure each step and connect them together.
-          </div>
-        </div>
-        <button
-          onClick={handleSave}
-          disabled={draft.saving || (!draft.dirty && !draft.isNew)}
-          className="inline-flex items-center gap-2 rounded-full bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white shadow hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          <Icons.Save className="h-3.5 w-3.5" />
-          {draft.saving ? "Saving..." : "Save"}
-        </button>
-      </div>
-
-      {loading ? (
-        <div className="mt-6 space-y-3">
-          {Array.from({ length: 4 }).map((_, index) => (
-            <ShimmerTile key={index} className="h-20 rounded-xl" />
-          ))}
-        </div>
-      ) : (
-        <>
-          <div className="mt-6 space-y-4">
-            <AnimatePresence initial={false}>
-              {nodes.map((node, index) => {
-                const isEntry = draft.definition.entry === node.id;
-                return (
-                  <motion.div
-                    key={node.id}
-                    layout
-                    initial={{ opacity: 0, y: 6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -6 }}
-                    className="rounded-2xl border border-white/60 bg-white/70 p-5 shadow-sm backdrop-blur dark:border-white/10 dark:bg-white/5"
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <div className="text-sm font-semibold text-zinc-800 dark:text-zinc-100">
-                          {getNodeLabel(node)}
-                        </div>
-                        <div className="text-xs uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
-                          {node.type}
-                        </div>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <button
-                          onClick={() => moveNode(node.id, -1)}
-                          disabled={index === 0}
-                          className="rounded-full border border-white/60 p-2 text-xs text-zinc-500 transition hover:bg-white disabled:opacity-50 dark:border-white/15 dark:hover:bg-white/10"
-                        >
-                          <Icons.ArrowUp className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          onClick={() => moveNode(node.id, 1)}
-                          disabled={index === nodes.length - 1}
-                          className="rounded-full border border-white/60 p-2 text-xs text-zinc-500 transition hover:bg-white disabled:opacity-50 dark:border-white/15 dark:hover:bg-white/10"
-                        >
-                          <Icons.ArrowDown className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          onClick={() => duplicateNode(node.id)}
-                          className="rounded-full border border-white/60 p-2 text-xs text-zinc-500 transition hover:bg-white dark:border-white/15 dark:hover:bg-white/10"
-                        >
-                          <Icons.Duplicate className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          onClick={() => removeNode(node.id)}
-                          className="rounded-full border border-white/60 p-2 text-xs text-zinc-500 transition hover:bg-white dark:border-white/15 dark:hover:bg-white/10"
-                        >
-                          <Icons.Trash className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="mt-4 space-y-4">
-                      <div>
-                        <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
-                          Display name
-                        </label>
-                        <input
-                          value={node.name ?? ""}
-                          onChange={(event) =>
-                            updateNode(node.id, (prev) => ({
-                              ...prev,
-                              name: event.target.value,
-                            }))
-                          }
-                          className="mt-1 w-full rounded-xl border border-white/60 bg-white/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40 dark:border-white/10 dark:bg-white/5 dark:text-white"
-                        />
-                      </div>
-                      {renderNodeFields({
-                        node,
-                        updateNode,
-                        uploadAudio,
-                      })}
-                      {node.type !== "hangup" ? (
-                        <div className="grid gap-2 sm:grid-cols-2">
-                          <div>
-                            <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
-                              Next step
-                            </label>
-                            <input
-                              value={(node as any).next ?? ""}
-                              onChange={(event) =>
-                                updateNode(node.id, (prev) => ({
-                                  ...(prev as any),
-                                  next: event.target.value || undefined,
-                                }))
-                              }
-                              placeholder="Target node ID"
-                              className="mt-1 w-full rounded-xl border border-white/60 bg-white/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40 dark:border-white/10 dark:bg-white/5 dark:text-white"
-                            />
-                          </div>
-                          <div className="flex items-center gap-2 rounded-xl border border-white/60 bg-white/60 px-3 py-2 text-xs text-zinc-500 dark:border-white/10 dark:bg-white/5 dark:text-zinc-300">
-                            <Switch
-                              checked={isEntry}
-                              onChange={() => setEntry(node.id)}
-                              className={`relative inline-flex h-6 w-11 items-center rounded-full ${
-                                isEntry ? "bg-emerald-500" : "bg-zinc-500"
-                              }`}
-                            >
-                              <span
-                                className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${
-                                  isEntry ? "translate-x-6" : "translate-x-1"
-                                }`}
-                              />
-                            </Switch>
-                            Set as entry step
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="rounded-xl border border-white/40 bg-white/50 px-3 py-2 text-xs text-zinc-500 dark:border-white/10 dark:bg-white/5 dark:text-zinc-400">
-                          Flow will terminate when this step is reached.
-                        </div>
-                      )}
-                    </div>
-                  </motion.div>
-                );
-              })}
-            </AnimatePresence>
-          </div>
-
-          <div className="mt-5 rounded-2xl border border-dashed border-white/60 p-4 text-sm dark:border-white/10">
-            <div className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Add step</div>
-            <div className="mt-3 grid gap-2 md:grid-cols-3">
-              {NODE_TYPES.map((item) => (
-                <button
-                  key={item.type}
-                  onClick={() => addNode(item.type)}
-                  className="rounded-xl border border-white/60 bg-white/50 px-3 py-3 text-left text-xs transition hover:border-emerald-400/50 hover:bg-emerald-500/10 hover:text-emerald-500 dark:border-white/10 dark:bg-white/5"
-                >
-                  <div className="font-semibold text-sm">{item.label}</div>
-                  <div className="mt-1 text-[11px] text-zinc-500 dark:text-zinc-400">
-                    {item.description}
-                  </div>
-                </button>
-              ))}
+      <div className="flex flex-col gap-5">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <div className="text-sm font-semibold text-[#1f2533] dark:text-white">Flow workspace</div>
+            <div className="text-xs text-[#7a8397] dark:text-slate-400">
+              Guided builder for crafting answer trees without complexity.
             </div>
           </div>
-        </>
-      )}
+          <button
+            onClick={handleSave}
+            disabled={draft.saving || (!draft.dirty && !draft.isNew)}
+            className="inline-flex items-center gap-2 rounded-full bg-amber-400 px-4 py-2 text-xs font-semibold text-[#1f2533] shadow-[0_10px_26px_rgba(249,201,143,0.45)] transition hover:bg-amber-300 disabled:cursor-not-allowed disabled:opacity-60 dark:bg-amber-300 dark:text-[#1b2130]"
+          >
+            <Icons.Save className="h-3.5 w-3.5" />
+            {draft.saving ? "Saving..." : "Save"}
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="space-y-3">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <ShimmerTile key={index} className="h-24 rounded-2xl" />
+            ))}
+          </div>
+        ) : (
+          <>
+            <section className={`${panelStyles}`}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="text-sm font-semibold text-[#1f2533] dark:text-white">Flow outline</p>
+                  <p className="text-xs text-[#7d8699] dark:text-slate-400">
+                    Tap a step to edit it. Connections update automatically.
+                  </p>
+                </div>
+                <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-[#7b4a1f] dark:bg-amber-300/20 dark:text-amber-100">
+                  {nodes.length} steps
+                </span>
+              </div>
+              {nodes.length === 0 ? (
+                <div className="mt-4 rounded-2xl border border-dashed border-white/50 bg-white/60 p-4 text-xs text-[#7a8397] dark:border-white/10 dark:bg-white/5">
+                  No steps yet. Add your first prompt or gather step to begin.
+                </div>
+              ) : (
+                <div className="mt-4 flex gap-3 overflow-x-auto pb-2">
+                  {nodes.map((node, index) => {
+                    const isActive = activeNode?.id === node.id;
+                    const isEntry = draft.definition.entry === node.id;
+                    const cardBase =
+                      "group relative min-w-[220px] rounded-2xl border px-4 py-3 text-left transition shadow-sm backdrop-blur cursor-pointer focus:outline-none";
+                    const cardTone = isActive
+                      ? "border-amber-400/70 bg-white text-[#1f2533] shadow-[0_16px_32px_rgba(249,201,143,0.35)] dark:border-amber-300/60 dark:bg-white/5 dark:text-white"
+                      : "border-white/50 bg-white/75 text-[#1f2533] hover:border-amber-200 dark:border-white/10 dark:bg-white/5 dark:text-white";
+                    return (
+                      <div
+                        key={node.id}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => onSelectNode(node.id)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            onSelectNode(node.id);
+                          }
+                        }}
+                        className={`${cardBase} ${cardTone}`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-[11px] uppercase tracking-[0.3em] text-[#9da3b4] dark:text-slate-400">
+                              Step {index + 1}
+                            </p>
+                            <p className="text-sm font-semibold">{getNodeLabel(node)}</p>
+                          </div>
+                          {isEntry ? (
+                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 dark:bg-emerald-400/10 dark:text-emerald-200">
+                              Start
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="mt-2 text-xs text-[#7d8699] dark:text-slate-400">
+                          {node.type === "play" && "Speaks a prompt"}
+                          {node.type === "gather" && "Collects keypad input"}
+                          {node.type === "dial" && "Transfers the caller"}
+                          {node.type === "pause" && "Adds a delay"}
+                          {node.type === "hangup" && "Ends the call"}
+                        </p>
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <button
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              moveNode(node.id, -1);
+                            }}
+                            disabled={index === 0}
+                            className="rounded-full border border-white/50 bg-white/70 p-2 text-xs text-[#7d8699] transition hover:text-[#1f2533] disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:bg-white/10 dark:text-slate-400"
+                          >
+                            <Icons.ArrowUp className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              moveNode(node.id, 1);
+                            }}
+                            disabled={index === nodes.length - 1}
+                            className="rounded-full border border-white/50 bg-white/70 p-2 text-xs text-[#7d8699] transition hover:text-[#1f2533] disabled:cursor-not-allowed disabled:opacity-40 dark:border-white/10 dark:bg-white/10 dark:text-slate-400"
+                          >
+                            <Icons.ArrowDown className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              duplicateNode(node.id);
+                            }}
+                            className="rounded-full border border-white/50 bg-white/70 p-2 text-xs text-[#7d8699] transition hover:text-[#1f2533] dark:border-white/10 dark:bg-white/10 dark:text-slate-400"
+                          >
+                            <Icons.Duplicate className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              removeNode(node.id);
+                            }}
+                            className="rounded-full border border-white/50 bg-white/70 p-2 text-xs text-rose-500 transition hover:text-rose-600 dark:border-white/10 dark:bg-white/10 dark:text-rose-300"
+                          >
+                            <Icons.Trash className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+
+            {activeNode ? (
+              <section className="grid gap-4 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
+                <div className={`${panelStyles} space-y-4`}>
+                  <div>
+                    <p className="text-sm font-semibold text-[#1f2533] dark:text-white">Step summary</p>
+                    <p className="text-xs text-[#7d8699] dark:text-slate-400">
+                      Quick actions for the selected node.
+                    </p>
+                  </div>
+                  <div className="space-y-2 text-xs text-[#6a7285] dark:text-slate-400">
+                    <div className="flex items-center justify-between">
+                      <span>Type</span>
+                      <span className="capitalize text-[#1f2533] dark:text-white">{activeNode.type}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Node ID</span>
+                      <span className="font-mono text-[11px] text-[#9399ab] dark:text-slate-400">
+                        {activeNode.id}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span>Entry point</span>
+                      <span className="text-[#1f2533] dark:text-white">
+                        {draft.definition.entry === activeNode.id ? "Yes" : "No"}
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setEntry(activeNode.id)}
+                    className="w-full rounded-2xl border border-white/50 bg-white/80 px-3 py-2 text-sm font-semibold text-[#1f2533] transition hover:border-amber-200 dark:border-white/10 dark:bg-white/10 dark:text-white"
+                  >
+                    {draft.definition.entry === activeNode.id ? "Starting step" : "Set as starting step"}
+                  </button>
+                  <div className="grid gap-2">
+                    <button
+                      onClick={() => duplicateNode(activeNode.id)}
+                      className="w-full rounded-2xl border border-white/50 bg-white/80 px-3 py-2 text-sm font-semibold text-[#1f2533] transition hover:border-amber-200 dark:border-white/10 dark:bg-white/10 dark:text-white"
+                    >
+                      Duplicate step
+                    </button>
+                    <button
+                      onClick={() => removeNode(activeNode.id)}
+                      className="w-full rounded-2xl border border-rose-200/60 bg-rose-50/80 px-3 py-2 text-sm font-semibold text-rose-600 transition hover:border-rose-300 dark:border-rose-400/40 dark:bg-rose-500/10 dark:text-rose-200"
+                    >
+                      Delete step
+                    </button>
+                  </div>
+                </div>
+                <div className={`${panelStyles} space-y-5`}>
+                  <div>
+                    <label className="text-xs font-semibold text-[#7d8699] dark:text-slate-400">
+                      Display name
+                    </label>
+                    <input
+                      value={activeNode.name ?? ""}
+                      onChange={(event) =>
+                        updateNode(activeNode.id, (prev) => ({
+                          ...prev,
+                          name: event.target.value,
+                        }))
+                      }
+                      className={inputStyles}
+                    />
+                  </div>
+                  {renderNodeFields({
+                    node: activeNode,
+                    updateNode,
+                    uploadAudio,
+                    destinationOptions,
+                  })}
+                  {activeNode.type !== "hangup" ? (
+                    <div>
+                      <label className="text-xs font-semibold text-[#7d8699] dark:text-slate-400">
+                        Next step
+                      </label>
+                      <select
+                        value={(activeNode as any).next ?? ""}
+                        onChange={(event) =>
+                          updateNode(activeNode.id, (prev) => ({
+                            ...(prev as any),
+                            next: event.target.value || undefined,
+                          }))
+                        }
+                        className={inputStyles}
+                      >
+                        <option value="">End the call here</option>
+                        {destinationOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl border border-white/40 bg-white/75 px-3 py-2 text-xs text-[#7d8699] dark:border-white/10 dark:bg-white/5 dark:text-slate-400">
+                      Flow will terminate when this step is reached.
+                    </div>
+                  )}
+                </div>
+              </section>
+            ) : null}
+
+            <section className={`${panelStyles} border-dashed`}>
+              <div className="text-sm font-semibold text-[#1f2533] dark:text-white">Add a new step</div>
+              <p className="text-xs text-[#7d8699] dark:text-slate-400">
+                Choose the action you want callers to experience next.
+              </p>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {NODE_TYPES.map((item) => (
+                  <button
+                    key={item.type}
+                    onClick={() => addNode(item.type)}
+                    className="rounded-2xl border border-white/60 bg-white/80 p-4 text-left transition hover:border-amber-200 hover:bg-amber-50/70 dark:border-white/10 dark:bg-white/5"
+                  >
+                    <div className="text-sm font-semibold text-[#1f2533] dark:text-white">{item.label}</div>
+                    <div className="mt-1 text-xs text-[#7d8699] dark:text-slate-400">{item.description}</div>
+                  </button>
+                ))}
+              </div>
+            </section>
+          </>
+        )}
+      </div>
     </MotionCard>
   );
 }
@@ -1042,9 +1168,10 @@ type NodeFieldProps = {
   node: FlowNode;
   updateNode: (id: string, mapper: (node: FlowNode) => FlowNode) => void;
   uploadAudio: (file: File) => Promise<any>;
+  destinationOptions: Array<{ value: string; label: string }>;
 };
 
-function renderNodeFields({ node, updateNode, uploadAudio }: NodeFieldProps) {
+function renderNodeFields({ node, updateNode, uploadAudio, destinationOptions }: NodeFieldProps) {
   if (node.type === "play") {
     return (
       <PlaybackEditor
@@ -1124,7 +1251,7 @@ function renderNodeFields({ node, updateNode, uploadAudio }: NodeFieldProps) {
           />
         </div>
         <div>
-          <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+          <label className="text-xs font-semibold text-[#7d8699] dark:text-slate-400">
             Variable
           </label>
           <input
@@ -1135,20 +1262,20 @@ function renderNodeFields({ node, updateNode, uploadAudio }: NodeFieldProps) {
                 variable: event.target.value,
               }))
             }
-            className="mt-1 w-full rounded-xl border border-white/60 bg-white/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40 dark:border-white/10 dark:bg-white/5 dark:text-white"
+            className={inputStyles}
           />
         </div>
-        <div className="rounded-2xl border border-white/60 bg-white/60 p-4 text-sm dark:border-white/10 dark:bg-white/5">
-          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
+        <div className={`${panelStyles} space-y-3`}>
+          <div className="text-xs font-semibold uppercase tracking-[0.2em] text-[#7d8699] dark:text-slate-400">
             Digit routing
           </div>
-          <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            {["1","2","3","4","5","6","7","8","9","0","*","#"].map((digit) => (
+          <div className="grid gap-2 sm:grid-cols-2">
+            {["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "*", "#"].map((digit) => (
               <div key={digit} className="flex items-center gap-2">
-                <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-zinc-900/5 text-xs font-semibold text-zinc-500 dark:bg-white/5 dark:text-zinc-400">
+                <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/80 text-xs font-semibold text-[#7d8699] dark:bg-white/10 dark:text-slate-400">
                   {digit}
                 </span>
-                <input
+                <select
                   value={node.branches?.[digit] ?? ""}
                   onChange={(event) =>
                     updateNode(node.id, (prev) => {
@@ -1165,17 +1292,23 @@ function renderNodeFields({ node, updateNode, uploadAudio }: NodeFieldProps) {
                       };
                     })
                   }
-                  placeholder="Target node ID"
-                  className="flex-1 rounded-xl border border-white/60 bg-white/70 px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-emerald-400/40 dark:border-white/10 dark:bg-white/5 dark:text-white"
-                />
+                  className="flex-1 rounded-2xl border border-white/40 bg-white/85 px-3 py-1.5 text-xs text-[#1f2433] focus:outline-none focus:ring-2 focus:ring-amber-400/50 dark:border-white/10 dark:bg-white/5 dark:text-white"
+                >
+                  <option value="">No connection</option>
+                  {destinationOptions.map((option) => (
+                    <option key={`${digit}-${option.value}`} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
               </div>
             ))}
           </div>
-          <div className="mt-3">
-            <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+          <div>
+            <label className="text-xs font-semibold text-[#7d8699] dark:text-slate-400">
               Default next step
             </label>
-            <input
+            <select
               value={node.defaultNext ?? ""}
               onChange={(event) =>
                 updateNode(node.id, (prev) => ({
@@ -1183,9 +1316,15 @@ function renderNodeFields({ node, updateNode, uploadAudio }: NodeFieldProps) {
                   defaultNext: event.target.value || undefined,
                 }))
               }
-              placeholder="Leave empty to end call"
-              className="mt-1 w-full rounded-xl border border-white/60 bg-white/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40 dark:border-white/10 dark:bg-white/5 dark:text-white"
-            />
+              className={inputStyles}
+            >
+              <option value="">Hang up if no match</option>
+              {destinationOptions.map((option) => (
+                <option key={`default-${option.value}`} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       </div>
@@ -1195,7 +1334,7 @@ function renderNodeFields({ node, updateNode, uploadAudio }: NodeFieldProps) {
     return (
       <div className="space-y-4">
         <div>
-          <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Endpoint</label>
+          <label className="text-xs font-semibold text-[#7d8699] dark:text-slate-400">Endpoint</label>
           <input
             value={node.endpoint}
             onChange={(event) =>
@@ -1204,11 +1343,11 @@ function renderNodeFields({ node, updateNode, uploadAudio }: NodeFieldProps) {
                 endpoint: event.target.value,
               }))
             }
-            className="mt-1 w-full rounded-xl border border-white/60 bg-white/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40 dark:border-white/10 dark:bg-white/5 dark:text-white"
+            className={inputStyles}
           />
         </div>
         <div>
-          <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Caller ID</label>
+          <label className="text-xs font-semibold text-[#7d8699] dark:text-slate-400">Caller ID</label>
           <input
             value={node.callerId ?? ""}
             onChange={(event) =>
@@ -1217,7 +1356,7 @@ function renderNodeFields({ node, updateNode, uploadAudio }: NodeFieldProps) {
                 callerId: event.target.value || undefined,
               }))
             }
-            className="mt-1 w-full rounded-xl border border-white/60 bg-white/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40 dark:border-white/10 dark:bg-white/5 dark:text-white"
+            className={inputStyles}
           />
         </div>
         <NumberField
@@ -1252,7 +1391,7 @@ function renderNodeFields({ node, updateNode, uploadAudio }: NodeFieldProps) {
     );
   }
   return (
-    <div className="rounded-xl border border-white/60 bg-white/60 px-3 py-2 text-xs text-zinc-500 dark:border-white/10 dark:bg-white/5 dark:text-zinc-400">
+    <div className="rounded-2xl border border-white/40 bg-white/80 px-3 py-2 text-xs text-[#7d8699] dark:border-white/10 dark:bg-white/5 dark:text-slate-400">
       No additional settings for this step.
     </div>
   );
@@ -1287,9 +1426,9 @@ function PlaybackEditor({ playback, onChange, uploadAudio, label }: PlaybackEdit
   const isFile = playback.mode === "file";
 
   return (
-    <div className="rounded-2xl border border-white/60 bg-white/60 p-4 dark:border-white/10 dark:bg-white/5">
-      <div className="flex items-center justify-between">
-        <div className="text-xs font-semibold text-zinc-500 dark:text-zinc-400">
+    <div className={`${panelStyles} space-y-4`}>
+        <div className="flex items-center justify-between">
+          <div className="text-xs font-semibold text-[#7d8699] dark:text-slate-400">
           {label ?? "Playback"}
         </div>
         <Switch
@@ -1297,9 +1436,9 @@ function PlaybackEditor({ playback, onChange, uploadAudio, label }: PlaybackEdit
           onChange={(checked) => {
             onChange(checked ? createPlayback("file") : createPlayback("tts"));
           }}
-          className={`relative inline-flex h-6 w-11 items-center rounded-full ${
-            isFile ? "bg-emerald-500" : "bg-zinc-500"
-          }`}
+            className={`relative inline-flex h-6 w-11 items-center rounded-full ${
+              isFile ? "bg-amber-400" : "bg-[#ccd3e2] dark:bg-white/10"
+            }`}
         >
           <span
             className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${
@@ -1321,9 +1460,9 @@ function PlaybackEditor({ playback, onChange, uploadAudio, label }: PlaybackEdit
       >
         <div className="mt-4 space-y-4">
           {isFile ? (
-            <div className="space-y-3">
-              <div>
-                <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+              <div className="space-y-3">
+                <div>
+                  <label className="text-xs font-semibold text-[#7d8699] dark:text-slate-400">
                   File URL
                 </label>
                 <input
@@ -1335,10 +1474,10 @@ function PlaybackEditor({ playback, onChange, uploadAudio, label }: PlaybackEdit
                     })
                   }
                   placeholder="/uploads/audio/file.wav"
-                  className="mt-1 w-full rounded-xl border border-white/60 bg-white/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40 dark:border-white/10 dark:bg-white/5 dark:text-white"
+                    className={inputStyles}
                 />
               </div>
-              <label className="inline-flex items-center gap-2 rounded-xl border border-white/60 bg-white/70 px-3 py-2 text-sm text-zinc-600 transition hover:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10">
+                <label className="inline-flex items-center gap-2 rounded-2xl border border-white/50 bg-white/85 px-3 py-2 text-sm font-semibold text-[#1f2533] transition hover:border-amber-200 dark:border-white/10 dark:bg-white/10 dark:text-white">
                 <Icons.Audio className="h-4 w-4" />
                 {uploading ? "Uploading..." : "Upload audio"}
                 <input
@@ -1354,9 +1493,9 @@ function PlaybackEditor({ playback, onChange, uploadAudio, label }: PlaybackEdit
               </label>
             </div>
           ) : (
-            <>
-              <div>
-                <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+              <>
+                <div>
+                  <label className="text-xs font-semibold text-[#7d8699] dark:text-slate-400">
                   Text to speak
                 </label>
                 <textarea
@@ -1368,12 +1507,12 @@ function PlaybackEditor({ playback, onChange, uploadAudio, label }: PlaybackEdit
                     })
                   }
                   rows={4}
-                  className="mt-1 w-full rounded-xl border border-white/60 bg-white/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40 dark:border-white/10 dark:bg-white/5 dark:text-white"
+                    className={`${inputStyles} resize-none`}
                 />
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <div>
-                  <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                    <label className="text-xs font-semibold text-[#7d8699] dark:text-slate-400">
                     Voice
                   </label>
                   <input
@@ -1384,11 +1523,11 @@ function PlaybackEditor({ playback, onChange, uploadAudio, label }: PlaybackEdit
                         voice: event.target.value,
                       })
                     }
-                    className="mt-1 w-full rounded-xl border border-white/60 bg-white/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40 dark:border-white/10 dark:bg-white/5 dark:text-white"
+                      className={inputStyles}
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                    <label className="text-xs font-semibold text-[#7d8699] dark:text-slate-400">
                     Language
                   </label>
                   <input
@@ -1399,7 +1538,7 @@ function PlaybackEditor({ playback, onChange, uploadAudio, label }: PlaybackEdit
                         language: event.target.value,
                       })
                     }
-                    className="mt-1 w-full rounded-xl border border-white/60 bg-white/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40 dark:border-white/10 dark:bg-white/5 dark:text-white"
+                      className={inputStyles}
                   />
                 </div>
               </div>
@@ -1422,7 +1561,7 @@ type NumberFieldProps = {
 function NumberField({ label, value, onChange, min, max }: NumberFieldProps) {
   return (
     <div>
-      <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400">{label}</label>
+      <label className="text-xs font-semibold text-[#7d8699] dark:text-slate-400">{label}</label>
       <input
         type="number"
         value={value}
@@ -1432,7 +1571,7 @@ function NumberField({ label, value, onChange, min, max }: NumberFieldProps) {
             onChange(Math.min(Math.max(next, min), max));
           }
         }}
-        className="mt-1 w-full rounded-xl border border-white/60 bg-white/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40 dark:border-white/10 dark:bg-white/5 dark:text-white"
+        className={inputStyles}
       />
     </div>
   );
