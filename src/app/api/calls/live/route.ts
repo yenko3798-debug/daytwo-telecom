@@ -3,46 +3,35 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
 import { CallStatus, Prisma } from "@prisma/client";
 
-function unauthorized() {
-  return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-}
-
-function ensureAdmin(role: string | undefined) {
-  return role === "admin" || role === "superadmin";
-}
-
 function rawLineFromMetadata(metadata: Prisma.JsonValue | null) {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
   const raw = (metadata as Record<string, any>).rawLine;
   return typeof raw === "string" ? raw : null;
 }
 
-export async function GET(
-  req: Request,
-  { params }: { params: { id: string } }
-) {
+export async function GET(req: Request) {
   const session = await getSession();
-  if (!session) return unauthorized();
-  const isAdmin = ensureAdmin(session.role);
-
-  const campaign = await prisma.campaign.findUnique({
-    where: { id: params.id },
-    select: { id: true, userId: true },
-  });
-  if (!campaign) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (!isAdmin && campaign.userId !== session.sub) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const url = new URL(req.url);
-  const limit = Math.min(Math.max(parseInt(url.searchParams.get("limit") ?? "100", 10), 1), 300);
-  const cursor = url.searchParams.get("cursor");
+  const limit = Math.min(Math.max(parseInt(url.searchParams.get("limit") ?? "200", 10), 1), 500);
   const status = url.searchParams.get("status");
-  const query = url.searchParams.get("q")?.trim();
+  const campaignId = url.searchParams.get("campaignId");
+  const q = url.searchParams.get("q")?.trim();
   const dtmfOnly = url.searchParams.get("dtmfOnly") === "true";
   const dtmfDigit = url.searchParams.get("dtmf")?.trim();
 
-  const where: Prisma.CallSessionWhereInput = { campaignId: params.id };
+  const where: Prisma.CallSessionWhereInput = {
+    campaign: {
+      userId: session.sub,
+    },
+  };
+
+  if (campaignId) {
+    where.campaignId = campaignId;
+  }
   if (status && status.toUpperCase() in CallStatus) {
     where.status = status.toUpperCase() as CallStatus;
   }
@@ -51,14 +40,14 @@ export async function GET(
   } else if (dtmfOnly) {
     where.dtmf = { not: null };
   }
-  if (query) {
+  if (q) {
     where.OR = [
-      { id: { contains: query, mode: "insensitive" } },
-      { dialedNumber: { contains: query, mode: "insensitive" } },
-      { callerId: { contains: query, mode: "insensitive" } },
+      { id: { contains: q, mode: "insensitive" } },
+      { dialedNumber: { contains: q, mode: "insensitive" } },
+      { callerId: { contains: q, mode: "insensitive" } },
       {
         lead: {
-          phoneNumber: { contains: query, mode: "insensitive" },
+          phoneNumber: { contains: q, mode: "insensitive" },
         },
       },
     ];
@@ -67,14 +56,9 @@ export async function GET(
   const calls = await prisma.callSession.findMany({
     where,
     orderBy: { createdAt: "desc" },
-    take: limit + 1,
-    ...(cursor
-      ? {
-          cursor: { id: cursor },
-          skip: 1,
-        }
-      : {}),
+    take: limit,
     include: {
+      campaign: { select: { id: true, name: true } },
       lead: {
         select: {
           phoneNumber: true,
@@ -82,20 +66,11 @@ export async function GET(
           metadata: true,
         },
       },
-      campaign: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
     },
   });
 
-  const hasMore = calls.length > limit;
-  const items = hasMore ? calls.slice(0, -1) : calls;
-
   return NextResponse.json({
-    calls: items.map((call) => ({
+    calls: calls.map((call) => ({
       id: call.id,
       status: call.status.toLowerCase(),
       callerId: call.callerId,
@@ -104,7 +79,6 @@ export async function GET(
       costCents: call.costCents,
       dtmf: call.dtmf,
       createdAt: call.createdAt,
-      metadata: call.metadata,
       campaign: call.campaign,
       lead: call.lead
         ? {
@@ -114,6 +88,5 @@ export async function GET(
           }
         : null,
     })),
-    nextCursor: hasMore ? items[items.length - 1]?.id : null,
   });
 }

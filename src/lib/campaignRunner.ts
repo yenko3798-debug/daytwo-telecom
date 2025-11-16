@@ -502,7 +502,7 @@ export async function stopCampaignEngine(campaignId: string, reason?: string) {
 }
 
 type CompletionPayload = {
-  status: CallStatus;
+  status?: CallStatus;
   durationSeconds?: number;
   dtmf?: string | null;
   recordingUrl?: string | null;
@@ -519,18 +519,31 @@ export async function completeCallSession(
   });
   if (!session) return;
 
-  const updates: Prisma.CallSessionUpdateInput = {
-    status: payload.status,
-    completedAt: new Date(),
-    durationSeconds:
-      payload.durationSeconds ?? session.durationSeconds ?? undefined,
-    recordingUrl: payload.recordingUrl ?? undefined,
-    metadata: payload.metadata ?? undefined,
-    costCents: payload.costCents ?? undefined,
-  };
-
-  if (payload.status === CallStatus.ANSWERED) {
-    updates.answeredAt = new Date();
+  const updates: Prisma.CallSessionUpdateInput = {};
+  if (payload.status) {
+    updates.status = payload.status;
+    updates.completedAt = new Date();
+    if (payload.status === CallStatus.ANSWERED) {
+      updates.answeredAt = new Date();
+    }
+  }
+  const duration =
+    payload.durationSeconds ?? session.durationSeconds ?? undefined;
+  if (typeof duration === "number") {
+    updates.durationSeconds = duration;
+  }
+  if (payload.recordingUrl !== undefined) {
+    updates.recordingUrl = payload.recordingUrl ?? undefined;
+  }
+  if (payload.metadata !== undefined) {
+    updates.metadata = payload.metadata ?? undefined;
+  }
+  if (payload.costCents !== undefined) {
+    updates.costCents = payload.costCents ?? undefined;
+  }
+  const hasDigits = typeof payload.dtmf === "string" && payload.dtmf.length > 0;
+  if (hasDigits) {
+    updates.dtmf = payload.dtmf;
   }
 
   await prisma.$transaction(async (tx) => {
@@ -540,33 +553,30 @@ export async function completeCallSession(
     });
 
     const leadUpdate: Prisma.CampaignLeadUpdateInput = {};
-    if (
-      payload.status === CallStatus.ANSWERED ||
-      payload.status === CallStatus.COMPLETED ||
-      payload.status === CallStatus.HUNGUP
-    ) {
-      leadUpdate.status = LeadStatus.COMPLETED;
-    } else if (
-      payload.status === CallStatus.FAILED ||
-      payload.status === CallStatus.CANCELLED
-    ) {
-      leadUpdate.status = LeadStatus.FAILED;
+    if (payload.status) {
+      if (
+        payload.status === CallStatus.ANSWERED ||
+        payload.status === CallStatus.COMPLETED ||
+        payload.status === CallStatus.HUNGUP
+      ) {
+        leadUpdate.status = LeadStatus.COMPLETED;
+      } else if (
+        payload.status === CallStatus.FAILED ||
+        payload.status === CallStatus.CANCELLED
+      ) {
+        leadUpdate.status = LeadStatus.FAILED;
+      }
     }
-
+    if (hasDigits) {
+      leadUpdate.dtmf = payload.dtmf;
+    }
     if (Object.keys(leadUpdate).length > 0) {
       await tx.campaignLead.update({
         where: { id: session.leadId },
         data: leadUpdate,
       });
     }
-
-    if (payload.dtmf) {
-      await tx.campaignLead.update({
-        where: { id: session.leadId },
-        data: {
-          dtmf: payload.dtmf,
-        },
-      });
+    if (hasDigits && !session.dtmf) {
       await tx.campaign.update({
         where: { id: session.campaignId },
         data: {

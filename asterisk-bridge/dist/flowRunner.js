@@ -44,13 +44,139 @@ async function synthesizeTts(text, voice, language) {
         return file;
     }
 }
+async function tryTranscode(command, args) {
+    try {
+        await execFileAsync(command, args);
+        return true;
+    }
+    catch {
+        return false;
+    }
+}
+async function fileExists(path) {
+    try {
+        await fs.access(path);
+        return true;
+    }
+    catch {
+        return false;
+    }
+}
+async function normalizeToWav(input, output) {
+    const tmp = `${output}.tmp`;
+    await fs.rm(tmp, { force: true }).catch(() => { });
+    const soxArgs = [input, "-r", "8000", "-c", "1", "-b", "16", "-e", "signed-integer", tmp];
+    if (!(await tryTranscode("sox", soxArgs))) {
+        const ffmpegArgs = ["-y", "-i", input, "-ar", "8000", "-ac", "1", "-sample_fmt", "s16", tmp];
+        if (!(await tryTranscode("ffmpeg", ffmpegArgs))) {
+            throw new Error("Unable to normalize audio to 8k mono WAV. Install sox or ffmpeg.");
+        }
+    }
+    await fs.rename(tmp, output);
+    return output;
+}
+async function convertWavToUlaw(input, output) {
+    const tmp = `${output}.tmp`;
+    await fs.rm(tmp, { force: true }).catch(() => { });
+    const soxArgs = [input, "-t", "ulaw", "-r", "8000", "-c", "1", tmp];
+    if (!(await tryTranscode("sox", soxArgs))) {
+        const ffmpegArgs = ["-y", "-i", input, "-ar", "8000", "-ac", "1", "-f", "mulaw", tmp];
+        if (!(await tryTranscode("ffmpeg", ffmpegArgs))) {
+            throw new Error("Unable to convert audio to ulaw. Install sox or ffmpeg.");
+        }
+    }
+    await fs.rename(tmp, output);
+    return output;
+}
+async function ensureNormalizedVariants(file) {
+    const base = file.replace(/\.[^/.]+$/, "");
+    const wavPath = `${base}.wav`;
+    const ulawPath = `${base}.ulaw`;
+    if (!(await fileExists(wavPath))) {
+        await normalizeToWav(file, wavPath);
+    }
+    if (!(await fileExists(ulawPath))) {
+        await convertWavToUlaw(wavPath, ulawPath);
+    }
+    return { wav: wavPath, ulaw: ulawPath };
+}
+function normalizePrefix(value) {
+    if (!value)
+        return "";
+    const trimmed = value.trim().replace(/^\/+|\/+$/g, "");
+    return trimmed.length ? `${trimmed}/` : "";
+}
 async function ensureMedia(playback) {
     const file = playback.mode === "file"
         ? await downloadToCache(playback.url)
         : await synthesizeTts(playback.text, playback.voice, playback.language);
-    const relativePath = relative(config.soundsRoot, file).replace(/\\/g, "/");
-    const withoutExtension = relativePath.replace(/\.[^/.]+$/, "");
-    return `sound:${withoutExtension}`;
+    const variants = await ensureNormalizedVariants(file);
+    const relativePath = relative(config.soundsRoot, variants.ulaw).replace(/\\/g, "/").replace(/\.ulaw$/, "");
+    if (relativePath.startsWith("..")) {
+        throw new Error("Media files must be inside ASTERISK_SOUNDS_ROOT");
+    }
+    const sanitizedPath = relativePath.replace(/^\/+/, "");
+    const prefix = normalizePrefix(config.soundPrefix);
+    const needsPrefix = prefix.length > 0 && sanitizedPath.startsWith(prefix) ? sanitizedPath : `${prefix}${sanitizedPath}`;
+    return `sound:${needsPrefix}`;
+}
+const playbackMediaCache = new Map();
+function playbackCacheKey(playback) {
+    if (playback.mode === "file") {
+        return `file:${playback.url}`;
+    }
+    return `tts:${playback.language ?? ""}:${playback.voice ?? ""}:${playback.text}`;
+}
+function loadPlaybackMedia(playback) {
+    const key = playbackCacheKey(playback);
+    let task = playbackMediaCache.get(key);
+    if (!task) {
+        task = ensureMedia(playback).catch((error) => {
+            playbackMediaCache.delete(key);
+            throw error;
+        });
+        playbackMediaCache.set(key, task);
+    }
+    return task;
+}
+function normalizeHangupCause(reason) {
+    if (typeof reason === "number" && Number.isFinite(reason)) {
+        return reason;
+    }
+    if (typeof reason === "string") {
+        const value = reason.trim().toLowerCase();
+        if (!value) {
+            return undefined;
+        }
+        const mapped = {
+            normal: 16,
+            completed: 16,
+            busy: 17,
+            congestion: 34,
+            rejected: 21,
+            noanswer: 19,
+        };
+        if (mapped[value] !== undefined) {
+            return mapped[value];
+        }
+        const parsed = Number(value);
+        if (!Number.isNaN(parsed)) {
+            return parsed;
+        }
+    }
+    return undefined;
+}
+async function warmFlowMedia(flow) {
+    const tasks = [];
+    for (const node of flow.nodes) {
+        if (node.type === "play") {
+            tasks.push(loadPlaybackMedia(node.playback));
+        }
+        else if (node.type === "gather" && node.prompt) {
+            tasks.push(loadPlaybackMedia(node.prompt));
+        }
+    }
+    await Promise.allSettled(tasks);
 }
 async function notifyPanel(event, body) {
     try {
@@ -129,7 +255,7 @@ async function handleGather(state, node) {
     let attempt = 0;
     while (attempt < node.attempts) {
         if (node.prompt) {
-            const media = await ensureMedia(node.prompt);
+            const media = await loadPlaybackMedia(node.prompt);
             await playMedia(state.channel, media);
         }
         const digits = await new Promise((resolve, reject) => {
@@ -157,6 +283,14 @@ async function handleGather(state, node) {
         if (digits.length >= node.minDigits) {
             state.variables[node.variable] = digits;
             state.digits += digits;
+            const aggregateDigits = state.digits;
+            notifyPanel("call.dtmf", {
+                sessionId: state.sessionId,
+                channelId: state.channelId,
+                dtmf: aggregateDigits,
+                digits,
+                variable: node.variable,
+            });
             const branch = node.branches[digits] ?? node.defaultNext;
             return branch ?? null;
         }
@@ -251,7 +385,7 @@ async function runFlow(state) {
         }
         switch (node.type) {
             case "play": {
-                const media = await ensureMedia(node.playback);
+                const media = await loadPlaybackMedia(node.playback);
                 await playMedia(state.channel, media);
                 current = node.next ?? null;
                 break;
@@ -277,14 +411,11 @@ async function runFlow(state) {
             }
             case "hangup": {
                 state.completed = true;
-                await new Promise((resolve, reject) => {
-                    state.channel.hangup({ reason: node.reason ?? "completed" }, (error) => {
-                        if (error)
-                            reject(error);
-                        else
-                            resolve();
-                    });
-                });
+                const cause = normalizeHangupCause(node.reason);
+                const params = cause !== undefined ? { cause } : {};
+                await new Promise((resolve) => {
+                    state.channel.hangup(params, () => resolve());
+                }).catch(() => { });
                 return;
             }
             default:
@@ -325,6 +456,9 @@ async function handleSessionStart(event, channel) {
     const payload = await fetchSession(sessionId);
     const state = createSessionState(payload, channel);
     sessionsByChannel.set(channel.id, state);
+    warmFlowMedia(state.flow).catch((error) => {
+        console.error(`Media warmup failed: ${error?.message ?? error}`);
+    });
     await new Promise((resolve, reject) => {
         channel.answer((error) => {
             if (error)

@@ -4,18 +4,22 @@ import { resolve } from "path";
 
 dotenv.config();
 
+function expandEnv(value: string) {
+  return value.replace(/\$\{([^}]+)\}/g, (_, name) => process.env[name]?.trim() ?? "");
+}
+
 function requireEnv(key: string) {
   const value = process.env[key];
   if (!value || value.trim().length === 0) {
     throw new Error(`Missing environment variable ${key}`);
   }
-  return value.trim();
+  return expandEnv(value.trim());
 }
 
 function optionalEnv(key: string) {
   const value = process.env[key];
   if (!value || value.trim().length === 0) return undefined;
-  return value.trim();
+  return expandEnv(value.trim());
 }
 
 function ensureDir(path: string) {
@@ -32,10 +36,13 @@ const panelBaseUrl = requireEnv("PANEL_BASE_URL").replace(/\/$/, "");
 const panelWebhookUrl = requireEnv("PANEL_WEBHOOK_URL");
 const ariBaseUrl = requireEnv("ARI_BASE_URL").replace(/\/$/, "");
 const pjsipDir = resolve(requireEnv("ASTERISK_PJSIP_DIR"));
-const soundsDir = resolve(requireEnv("ASTERISK_SOUNDS_DIR"));
+const soundsRoot = resolve(requireEnv("ASTERISK_SOUNDS_ROOT"));
+const soundsDir = resolve(optionalEnv("ASTERISK_SOUNDS_DIR") ?? soundsRoot);
 const cacheDir = resolve(optionalEnv("SOUNDS_CACHE_DIR") ?? soundsDir);
-const soundsRoot = resolve(soundsDir, "..");
+const soundPrefix = optionalEnv("ASTERISK_SOUND_PREFIX") ?? undefined;
+const soundExtension = optionalEnv("ASTERISK_SOUND_EXTENSION") ?? undefined;
 ensureDir(pjsipDir);
+ensureDir(soundsRoot);
 ensureDir(soundsDir);
 ensureDir(cacheDir);
 
@@ -56,6 +63,8 @@ export const config = {
   soundsDir,
   soundsRoot,
   cacheDir,
+  soundPrefix,
+  soundExtension,
   ttsProvider: optionalEnv("TTS_PROVIDER") ?? "pico",
   ringTimeout,
   dialTimeout,

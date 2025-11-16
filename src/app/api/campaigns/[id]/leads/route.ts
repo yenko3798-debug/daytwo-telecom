@@ -11,6 +11,7 @@ const createSchema = z.object({
       z.object({
         phone: z.string().min(6).max(32),
         metadata: z.record(z.any()).optional(),
+        raw: z.string().max(2048).optional(),
       })
     )
     .min(1),
@@ -99,12 +100,21 @@ export async function POST(
     const prepared = body.leads.map((lead) => {
       const normalized =
         normalizePhoneNumber(lead.phone, (body.country as any) ?? "US") ?? lead.phone;
+      const metadataPayload: Record<string, any> = {};
+      if (lead.metadata && typeof lead.metadata === "object") {
+        Object.assign(metadataPayload, lead.metadata);
+      }
+      if (lead.raw) {
+        metadataPayload.rawLine = lead.raw;
+      }
+      const metadata =
+        Object.keys(metadataPayload).length > 0 ? metadataPayload : null;
       return {
         campaignId: id,
         phoneNumber: lead.phone,
         normalizedNumber: normalized,
         status: LeadStatus.PENDING,
-        metadata: lead.metadata ?? null,
+        metadata,
       };
     });
 
