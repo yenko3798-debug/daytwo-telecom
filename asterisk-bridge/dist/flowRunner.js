@@ -199,6 +199,16 @@ async function playMedia(channel, media) {
 async function pause(ms) {
     await new Promise((resolve) => setTimeout(resolve, ms));
 }
+async function hangupChannel(channel, reason) {
+    await new Promise((resolve, reject) => {
+        channel.hangup({ reason }, (error) => {
+            if (error)
+                reject(error);
+            else
+                resolve();
+        });
+    });
+}
 function createSessionState(payload, channel) {
     if (!payload.flow) {
         throw new Error("Flow definition missing");
@@ -384,9 +394,15 @@ async function runFlow(state) {
             }
             case "hangup": {
                 state.completed = true;
-                await new Promise((resolve) => {
-                    state.channel.hangup({ reason: node.reason ?? "completed" }, () => resolve());
-                }).catch(() => { });
+                try {
+                    await hangupChannel(state.channel, node.reason ?? "completed");
+                }
+                catch (error) {
+                    const message = error?.message ?? String(error);
+                    if (!/Channel not in Stasis|No such channel/i.test(message)) {
+                        console.warn(`Hangup failed for ${state.channelId}: ${message}`);
+                    }
+                }
                 return;
             }
             default:
