@@ -35,8 +35,8 @@ const features = [
 
 const faqs = [
   {
-    question: "Do credits expire?",
-    answer: "No. Credits live until you spend them. Annual bundles simply add a bonus balance on top.",
+    question: "How does the subscription model work?",
+    answer: "Subscribe monthly or yearly to unlock discounted rates per 1,000 calls. Your subscription gives you access to better rates on a refillable balance that never expires.",
   },
   {
     question: "Can we mix different coins?",
@@ -60,31 +60,28 @@ type TierConfig = {
 };
 
 export default function PricingPage() {
-  const [annual, setAnnual] = useState(true);
+  const [yearly, setYearly] = useState(false);
   const { loading } = usePageLoading(600);
 
-  const callsPrice = 275;
-  const discount = 0.15;
-
-  const unit = annual ? Math.round(callsPrice * (1 - discount)) : callsPrice;
-  const caption = annual ? `Annual credit: ${(discount * 100) | 0}% bonus` : "Pay as you go";
+  const caption = yearly ? "Save 2 months with yearly billing" : "Billed monthly";
 
   const tiers: TierConfig[] = [
     {
-      title: "Starter",
-      price: `$${unit}`,
-      unit: "/ 1,000 calls",
+      title: "Lite",
+      price: yearly ? "$5,000" : "$500",
+      unit: yearly ? "/year" : "/month",
+      caption: "$150 per 1,000 calls",
       cta: (
         <>
           <Link
             href="/topup"
             className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 px-4 py-2 text-sm font-semibold text-white shadow-[0_16px_32px_rgba(13,148,136,0.35)] transition hover:-translate-y-0.5 hover:shadow-[0_22px_40px_rgba(13,148,136,0.45)]"
           >
-            Top up <Icon.Arrow className="h-4 w-4" />
+            Get Started <Icon.Arrow className="h-4 w-4" />
           </Link>
           <Link
             href="/auth"
-            className="inline-flex w-full items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-zinc-700 ring-1 ring-white/60 transition hover:-translate-y-0.5 hover:bg-white dark:text-zinc-200 dark:ring-white/10 dark:hover:bg-white/10"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-emerald-400/20 to-teal-400/20 px-4 py-2 text-sm font-semibold text-emerald-700 ring-1 ring-emerald-500/30 transition hover:-translate-y-0.5 hover:from-emerald-400/30 hover:to-teal-400/30 dark:text-emerald-300 dark:ring-emerald-400/30"
           >
             Create account
           </Link>
@@ -93,23 +90,23 @@ export default function PricingPage() {
       items: features.slice(0, 4),
     },
     {
-      title: "Pro",
-      price: `$${unit * 5}`,
-      unit: "/ 5,000 calls bundle",
+      title: "Premium",
+      price: yearly ? "$20,000" : "$2,000",
+      unit: yearly ? "/year" : "/month",
       highlight: true,
-      badge: annual ? `${(discount * 100) | 0}% bonus credit` : "Most popular",
-      caption: "Priority routes • Auto-retry • Webhooks",
+      badge: "Most popular",
+      caption: "$100 per 1,000 calls",
       cta: (
         <>
           <Link
             href="/topup"
             className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-emerald-500 via-teal-500 to-sky-500 px-4 py-2 text-sm font-semibold text-white shadow-[0_18px_36px_rgba(13,148,136,0.4)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_48px_rgba(13,148,136,0.5)]"
           >
-            Get Pro <Icon.Arrow className="h-4 w-4" />
+            Get Premium <Icon.Arrow className="h-4 w-4" />
           </Link>
           <Link
             href="/auth"
-            className="inline-flex w-full items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-zinc-700 ring-1 ring-white/60 transition hover:-translate-y-0.5 hover:bg-white dark:text-zinc-200 dark:ring-white/10 dark:hover:bg-white/10"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-emerald-400/20 to-teal-400/20 px-4 py-2 text-sm font-semibold text-emerald-700 ring-1 ring-emerald-500/30 transition hover:-translate-y-0.5 hover:from-emerald-400/30 hover:to-teal-400/30 dark:text-emerald-300 dark:ring-emerald-400/30"
           >
             Sign in
           </Link>
@@ -119,51 +116,51 @@ export default function PricingPage() {
     },
     {
       title: "Enterprise",
-      price: "Talk to us",
-      unit: "Tailored credit",
-      caption: "Custom billing • Multi-account • Dedicated routes",
+      price: yearly ? "$50,000" : "$5,000",
+      unit: yearly ? "/year" : "/month",
+      caption: "$80 per 1,000 calls",
       cta: (
         <>
           <Link
-            href="/status"
+            href="/topup"
             className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 px-4 py-2 text-sm font-semibold text-white shadow-[0_16px_32px_rgba(13,148,136,0.35)] transition hover:-translate-y-0.5 hover:shadow-[0_22px_40px_rgba(13,148,136,0.45)]"
           >
-            Contact <Icon.Arrow className="h-4 w-4" />
+            Get Enterprise <Icon.Arrow className="h-4 w-4" />
           </Link>
           <a
             href="mailto:studio@foe.dev"
-            className="inline-flex w-full items-center justify-center gap-2 rounded-full px-4 py-2 text-sm font-semibold text-zinc-700 ring-1 ring-white/60 transition hover:-translate-y-0.5 hover:bg-white dark:text-zinc-200 dark:ring-white/10 dark:hover:bg-white/10"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-emerald-400/20 to-teal-400/20 px-4 py-2 text-sm font-semibold text-emerald-700 ring-1 ring-emerald-500/30 transition hover:-translate-y-0.5 hover:from-emerald-400/30 hover:to-teal-400/30 dark:text-emerald-300 dark:ring-emerald-400/30"
           >
             Email us
           </a>
         </>
       ),
-      items: [...features, "Dedicated success engineer", "Multi-region delivery"],
+      items: [...features, "Dedicated success engineer", "Multi-region delivery", "Custom billing", "Multi-account support"],
     },
   ];
 
   return (
     <PageFrame
       eyebrow="Pricing"
-      title="Simple pricing for serious calling"
-      description="Only pay for what you send. Credit never expires. Switch coins at Top Up any time."
+      title="Subscription plans with volume discounts"
+      description="Subscribe to unlock better rates per 1,000 calls. Top up your refillable balance any time with any supported coin."
       actions={
         <div className="inline-flex items-center gap-3 rounded-full border border-white/60 bg-white/80 p-1 text-xs shadow-sm dark:border-white/10 dark:bg-white/5">
           <button
-            onClick={() => setAnnual(false)}
+            onClick={() => setYearly(false)}
             className={`rounded-full px-3 py-1 font-semibold transition ${
-              !annual ? "bg-emerald-500 text-white shadow-sm" : "text-zinc-700 hover:bg-white/70 dark:text-zinc-200 dark:hover:bg-white/10"
+              !yearly ? "bg-emerald-500 text-white shadow-sm" : "text-zinc-700 hover:bg-white/70 dark:text-zinc-200 dark:hover:bg-white/10"
             }`}
           >
-            Pay as you go
+            Monthly
           </button>
           <button
-            onClick={() => setAnnual(true)}
+            onClick={() => setYearly(true)}
             className={`rounded-full px-3 py-1 font-semibold transition ${
-              annual ? "bg-emerald-500 text-white shadow-sm" : "text-zinc-700 hover:bg-white/70 dark:text-zinc-200 dark:hover:bg-white/10"
+              yearly ? "bg-emerald-500 text-white shadow-sm" : "text-zinc-700 hover:bg-white/70 dark:text-zinc-200 dark:hover:bg-white/10"
             }`}
           >
-            Annual bonus
+            Yearly
           </button>
         </div>
       }
@@ -189,9 +186,9 @@ export default function PricingPage() {
           <FAQ />
         </MotionCard>
         <MotionCard tone="emerald" className="p-6 text-emerald-200">
-          <div className="text-sm font-semibold text-emerald-100">Need a custom route?</div>
+          <div className="text-sm font-semibold text-emerald-100">Need a custom plan?</div>
           <p className="mt-2 text-sm text-emerald-200/80">
-            We blend premium carriers with smart retries. Tell us your volume and compliance requirements and we will tailor a route.
+            We blend premium carriers with smart retries. Tell us your volume and compliance requirements and we will tailor a subscription and route for you.
           </p>
           <Link
             href="/status"
