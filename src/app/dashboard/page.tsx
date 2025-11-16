@@ -80,7 +80,7 @@ export default function StartPage() {
             <Link href="/campaigns" className="rounded-full bg-gradient-to-r from-emerald-500 via-teal-500 to-sky-500 px-4 py-2 text-sm font-semibold text-white shadow-[0_16px_32px_rgba(13,148,136,0.35)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_42px_rgba(13,148,136,0.45)]">
                 New campaign
             </Link>
-            <Link href="/topup" className="rounded-full border border-white/15 px-4 py-2 text-sm font-semibold text-[var(--lux-muted)] transition hover:-translate-y-0.5 hover:bg-white/10">
+            <Link href="/topup" className="rounded-full px-4 py-2 text-sm font-semibold text-zinc-700 ring-1 ring-white/50 transition hover:-translate-y-0.5 hover:bg-white dark:text-zinc-200 dark:ring-white/10 dark:hover:bg-white/10">
                 Top up
             </Link>
         </div>
@@ -244,17 +244,17 @@ function Action({ href, title, icon, children }) {
     return (
         <Link
             href={href}
-            className="group relative overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-4 text-[var(--lux-foreground)] shadow-[0_18px_45px_rgba(0,0,0,0.4)] backdrop-blur-2xl transition hover:-translate-y-1 hover:border-white/20"
+            className="group relative overflow-hidden rounded-2xl border border-white/60 bg-white/75 p-4 shadow-[0_18px_40px_rgba(15,23,42,0.12)] backdrop-blur transition hover:-translate-y-1 hover:shadow-[0_24px_52px_rgba(15,23,42,0.18)] dark:border-white/10 dark:bg-white/5 dark:shadow-[0_18px_35px_rgba(3,7,18,0.55)]"
         >
-            <span className="absolute inset-0 bg-gradient-to-br from-emerald-400/20 via-transparent to-transparent opacity-0 transition duration-300 group-hover:opacity-100" />
-            <div className="relative z-10 flex items-center gap-2 text-emerald-300">
+            <span className="absolute inset-0 bg-gradient-to-br from-emerald-200/20 via-transparent to-transparent opacity-0 transition duration-300 group-hover:opacity-100 dark:from-emerald-500/20" />
+            <div className="relative z-10 flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
                 <span className="inline-flex h-5 w-5 items-center justify-center rounded-md bg-emerald-500/15 ring-1 ring-emerald-400/30">
                     {icon}
                 </span>
                 <span className="text-sm font-semibold">{title}</span>
             </div>
-            <p className="relative z-10 mt-1 text-xs text-[var(--lux-muted)]">{children}</p>
-            <div className="relative z-10 mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-300 opacity-0 transition group-hover:opacity-100">
+            <p className="relative z-10 mt-1 text-xs text-zinc-600 dark:text-zinc-300">{children}</p>
+            <div className="relative z-10 mt-2 inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 opacity-0 transition group-hover:opacity-100 dark:text-emerald-400">
                 Open <I.Arrow className="h-3 w-3" />
             </div>
         </Link>
@@ -264,11 +264,11 @@ function Action({ href, title, icon, children }) {
 function StatusPill({ label, value, tone }: { label: string; value: React.ReactNode; tone?: "emerald" | "amber" }) {
     const palette =
         tone === "amber"
-            ? "bg-amber-500/15 text-amber-200 ring-amber-400/30"
-            : "bg-emerald-500/15 text-emerald-200 ring-emerald-400/30";
+            ? "bg-amber-500/15 text-amber-300 ring-amber-400/30"
+            : "bg-emerald-500/15 text-emerald-300 ring-emerald-400/30";
     return (
         <div className={`flex items-center justify-between rounded-xl px-3 py-2 text-xs font-semibold ring-1 ${palette}`}>
-            <span className="text-white/80">{label}</span>
+            <span className="text-emerald-200/80">{label}</span>
             <span>{value}</span>
         </div>
     );
@@ -289,7 +289,7 @@ function ActivityList({ items, loading }: { items: LiveMetrics["feed"]; loading?
         return <div className="text-sm text-zinc-500 dark:text-zinc-400">No live calls yet. Launch a campaign to populate this feed.</div>;
     }
     return (
-        <div className="divide-y divide-white/10">
+        <div className="divide-y divide-zinc-900/10 dark:divide-white/10">
             <AnimatePresence initial={false}>
                 {rows.map((r) => (
                     <motion.div
@@ -299,18 +299,18 @@ function ActivityList({ items, loading }: { items: LiveMetrics["feed"]; loading?
                         exit={{ opacity: 0, y: -6 }}
                         className="flex flex-col gap-1 py-2"
                     >
-                        <div className="flex flex-wrap items-center gap-2 text-sm text-white">
-                            <span className="font-medium text-white">{r.callerId ?? "Unknown"}</span>
-                            <span className="text-[var(--lux-muted)]">→</span>
-                            <span className="text-white/80">{r.dialedNumber ?? "—"}</span>
+                        <div className="flex flex-wrap items-center gap-2 text-sm">
+                            <span className="font-medium text-zinc-900 dark:text-zinc-100">{r.callerId ?? "Unknown"}</span>
+                            <span className="text-zinc-500">→</span>
+                            <span className="text-zinc-700 dark:text-zinc-200">{r.dialedNumber ?? "—"}</span>
                             <StatusBadge value={r.status} />
                             {r.dtmf ? (
-                                <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 font-mono text-[11px] text-emerald-200">
+                                <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 font-mono text-[11px] text-emerald-600 dark:text-emerald-300">
                                     DTMF {r.dtmf}
                                 </span>
                             ) : null}
                         </div>
-                        <div className="flex justify-between text-xs text-[var(--lux-muted)]">
+                        <div className="flex justify-between text-xs text-zinc-500 dark:text-zinc-400">
                             <span>{new Date(r.createdAt).toLocaleTimeString()} • {r.campaign.name}</span>
                             {r.lead?.rawLine ? <span className="truncate text-right" title={r.lead.rawLine}>{r.lead.rawLine}</span> : null}
                         </div>
