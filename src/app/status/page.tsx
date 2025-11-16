@@ -4,6 +4,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { PageFrame, MotionCard, ShimmerTile } from "@/components/ui/LuxuryPrimitives";
 import { usePageLoading } from "@/hooks/usePageLoading";
+import { useLiveMetrics } from "@/hooks/useLiveMetrics";
+import type { LiveMetrics } from "@/hooks/useLiveMetrics";
 
 // --- inline icons (no external deps) ---
 const Icon = {
@@ -29,80 +31,52 @@ function Spark({data=[3,5,4,7,6,9,8,10], className="w-full h-10", stroke="curren
   );
 }
 
-// --- mock global feed (swap to your API/SSE) ---
-function useGlobalMock(){
-  const [t, setT] = useState(0);
-  const [rows, setRows] = useState(()=> seed());
-  useEffect(()=>{ const id = setInterval(()=>{ setRows(r=>tick(r)); setT(x=>x+1); }, 1600); return ()=>clearInterval(id); }, []);
-  return [rows, t];
-}
-
-function seed(){
-  const out = [];
-  for(let i=0;i<64;i++){
-    out.push(one());
-  }
-  return out;
-}
-
-function one(){
-  const statuses = ["queued","ringing","answered","voicemail","no-answer","busy","failed","completed"];
-  const callers = ["+12125550123","+13025550123","+17185550123"]; 
-  const callee = "+1"+String(Math.floor(1e9 + Math.random()*9e9));
-  const st = statuses[Math.floor(Math.random()*statuses.length)];
-  const dtmf = Math.random()<0.22 ? randomDTMF() : null;
-  return { id: `G-${Math.random().toString(36).slice(2,8)}`,
-    time: Date.now()-Math.floor(Math.random()*1000*120),
-    caller: callers[Math.floor(Math.random()*callers.length)],
-    callee, status: st,
-    duration: ["answered","voicemail","completed"].includes(st) ? Math.floor(Math.random()*180)+8 : 0,
-    cost: +(Math.random()*0.09+0.01).toFixed(4),
-    dtmf };
-}
-
-function tick(prev){
-  // rotate + add a fresh row to simulate streaming
-  const next = [...prev];
-  next.shift();
-  next.push(one());
-  return next;
-}
-
-function randomDTMF(){
-  const keys=["1","2","3","4","5","6","7","8","9","0","*","#"]; const len = 1+Math.floor(Math.random()*4);
-  let s=""; for(let i=0;i<len;i++){ s += keys[Math.floor(Math.random()*keys.length)]; } return s;
-}
-
 function cn(...a){ return a.filter(Boolean).join(" "); }
 
 export default function GlobalStatus(){
-  const [rows, t] = useGlobalMock();
   const [range, setRange] = useState("24h"); // 24h | 7d | 30d
   const [dtmfOnly, setDtmfOnly] = useState(false);
-  const { loading } = usePageLoading(700);
+  const { loading: introLoading } = usePageLoading(700);
+  const rangeHours = range === "7d" ? 24 * 7 : range === "30d" ? 24 * 30 : 24;
+  const { data: metrics, loading: metricsLoading } = useLiveMetrics({ scope: "public", rangeHours, intervalMs: 8000 });
+  const loading = introLoading || metricsLoading;
 
-  // aggregate (pretend these are global counters)
-  const metrics = useMemo(()=>{
-    const total = rows.length * 120; // pretend window
-    const answered = Math.round(total * 0.41 + (t%17));
-    const dtmf = Math.round(answered * 0.36 + (t%13));
+  const stats = useMemo(()=>{
+    const total = metrics?.calls.total ?? 0;
+    const answered = metrics?.calls.answered ?? 0;
+    const dtmf = metrics?.calls.dtmf ?? 0;
     const asr = Math.round((answered/Math.max(total,1))*100);
     const conv = Math.round((dtmf/Math.max(total,1))*100);
-    const spend = (total * 0.032).toFixed(2);
-    const cps = Math.max(1, (t%30));
-    const active = 3 + (t%4);
+    const spend = ((metrics?.calls.costCents ?? 0)/100).toFixed(2);
+    const cps = metrics?.cps ?? 0;
+    const active = metrics?.campaigns.running ?? 0;
     return {total, answered, dtmf, asr, conv, spend, cps, active};
-  }, [rows, t]);
+  }, [metrics]);
 
-  const display = useMemo(()=> rows.filter(r=> dtmfOnly? !!r.dtmf : true ), [rows, dtmfOnly]);
+  const rows = useMemo(()=>{
+    const feed = metrics?.feed ?? [];
+    return dtmfOnly ? feed.filter(r=> !!r.dtmf) : feed;
+  }, [metrics, dtmfOnly]);
 
-  // simple spark data
-  const sparkA = useMemo(()=> roll(32, 12, 5), [t]);
-  const sparkB = useMemo(()=> roll(32, 7, 3), [t]);
+  const sparkA = useMemo(()=> buildSparkMetrics(metrics?.feed, "duration"), [metrics]);
+  const sparkB = useMemo(()=> buildSparkMetrics(metrics?.feed, "dtmf"), [metrics]);
+  const answeredTrend = sparkA.length >= 2 ? sparkA[sparkA.length - 1] - sparkA[sparkA.length - 2] : 0;
+  const dtmfTrend = sparkB.length >= 2 ? sparkB[sparkB.length - 1] - sparkB[sparkB.length - 2] : 0;
 
   function exportCsv(){
     const header = ["time","id","caller","callee","status","duration","cost","dtmf"].join(",");
-    const body = display.map(r=> [new Date(r.time).toISOString(), r.id, r.caller, r.callee, r.status, r.duration, r.cost, r.dtmf||""]).join("\n");
+    const body = rows
+      .map(r=> [
+        new Date(r.createdAt).toISOString(),
+        r.id,
+        r.callerId ?? "",
+        r.dialedNumber ?? "",
+        r.status,
+        r.durationSeconds ?? 0,
+        ((r.costCents ?? 0)/100).toFixed(4),
+        r.dtmf || "",
+      ].join(","))
+      .join("\n");
     const blob = new Blob([header+"\n"+body], {type:"text/csv"});
     const url = URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download="global-status.csv"; a.click(); URL.revokeObjectURL(url);
   }
@@ -130,26 +104,28 @@ export default function GlobalStatus(){
         </div>
       }
     >
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard title="Total calls" value={n(metrics.total)} trend={+sparkA.at(-1) - +sparkA.at(-2)} loading={loading}>
-          <Spark data={sparkA} className="h-8 w-full" />
-        </MetricCard>
-        <MetricCard
-          title="Answered (ASR)"
-          value={`${n(metrics.answered)} • ${metrics.asr}%`}
-          tone="emerald"
-          loading={loading}
-        >
-          <Spark data={sparkB} className="h-8 w-full" />
-        </MetricCard>
-        <MetricCard
-          title="DTMF captured"
-          value={`${n(metrics.dtmf)} • ${metrics.conv}%`}
-          tone="violet"
-          loading={loading}
-        />
-        <MetricCard title="Spend" value={`$${metrics.spend}`} tone="amber" loading={loading} />
-      </div>
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <MetricCard title="Total calls" value={n(stats.total)} trend={answeredTrend} loading={loading}>
+            <Spark data={sparkA} className="h-8 w-full" />
+          </MetricCard>
+          <MetricCard
+            title="Answered (ASR)"
+            value={`${n(stats.answered)} • ${stats.asr}%`}
+            tone="emerald"
+            loading={loading}
+            trend={answeredTrend}
+          >
+            <Spark data={sparkB} className="h-8 w-full" />
+          </MetricCard>
+          <MetricCard
+            title="DTMF captured"
+            value={`${n(stats.dtmf)} • ${stats.conv}%`}
+            tone="violet"
+            loading={loading}
+            trend={dtmfTrend}
+          />
+          <MetricCard title="Spend" value={`$${stats.spend}`} tone="amber" loading={loading} />
+        </div>
 
       <MotionCard tone="neutral" className="mt-6 space-y-4 p-6">
         <div className="flex flex-wrap items-center gap-2">
@@ -195,24 +171,26 @@ export default function GlobalStatus(){
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/50 bg-white/60 dark:divide-white/5 dark:bg-transparent">
-                  <AnimatePresence initial={false}>
-                    {display.map((r)=> (
-                      <motion.tr key={r.id} layout initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="transition hover:bg-white dark:hover:bg-white/5">
-                        <td className="px-5 py-3 whitespace-nowrap text-zinc-500 dark:text-zinc-400">{new Date(r.time).toLocaleTimeString()}</td>
-                        <td className="px-5 py-3">
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-zinc-800 dark:text-zinc-100">{r.caller}</span>
-                            <span className="text-zinc-500">→</span>
-                            <span className="text-zinc-700 dark:text-zinc-200">{r.callee}</span>
-                          </div>
-                        </td>
-                        <td className="px-5 py-3"><Badge value={r.status}/></td>
-                        <td className="px-5 py-3 tabular-nums text-zinc-700 dark:text-zinc-200">{r.duration ? `${r.duration}s` : "—"}</td>
-                        <td className="px-5 py-3 font-mono text-xs text-zinc-500 dark:text-zinc-300">{r.dtmf || ""}</td>
-                        <td className="px-5 py-3 tabular-nums text-zinc-700 dark:text-zinc-100">${r.cost.toFixed(4)}</td>
-                      </motion.tr>
-                    ))}
-                  </AnimatePresence>
+                    <AnimatePresence initial={false}>
+                      {rows.map((r)=> (
+                        <motion.tr key={r.id} layout initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} className="transition hover:bg-white dark:hover:bg-white/5">
+                          <td className="px-5 py-3 whitespace-nowrap text-zinc-500 dark:text-zinc-400">{new Date(r.createdAt).toLocaleTimeString()}</td>
+                          <td className="px-5 py-3">
+                            <div className="flex items-center gap-2">
+                              <span className="font-semibold text-zinc-800 dark:text-zinc-100">{r.callerId ?? "Unknown"}</span>
+                              <span className="text-zinc-500">→</span>
+                              <span className="text-zinc-700 dark:text-zinc-200">{r.dialedNumber ?? "Unknown"}</span>
+                            </div>
+                          </td>
+                          <td className="px-5 py-3"><Badge value={r.status}/></td>
+                          <td className="px-5 py-3 tabular-nums text-zinc-700 dark:text-zinc-200">{r.durationSeconds ? `${r.durationSeconds}s` : "—"}</td>
+                          <td className="px-5 py-3 font-mono text-xs text-zinc-500 dark:text-zinc-300">{r.dtmf || ""}</td>
+                          <td className="px-5 py-3 tabular-nums text-zinc-700 dark:text-zinc-100">
+                            ${((r.costCents ?? 0) / 100).toFixed(4)}
+                          </td>
+                        </motion.tr>
+                      ))}
+                    </AnimatePresence>
                 </tbody>
               </table>
             </div>
@@ -220,11 +198,23 @@ export default function GlobalStatus(){
         )}
 
         <p className="text-xs text-zinc-500 dark:text-zinc-400">
-          Public feed • Showing {display.length} of {rows.length} events • Active campaigns: {metrics.active} • Current CPS: {metrics.cps}
+            Public feed • Showing {rows.length} events • Active campaigns: {stats.active} • Current CPS: {stats.cps.toFixed(2)}
         </p>
       </MotionCard>
     </PageFrame>
   );
+}
+
+function buildSparkMetrics(feed: LiveMetrics["feed"] | undefined, mode: "duration" | "dtmf") {
+  if (!feed || feed.length < 4) {
+    return roll(32, mode === "duration" ? 12 : 7, 4);
+  }
+  return feed.slice(0, 32).map((item) => {
+    if (mode === "duration") {
+      return Math.max(1, item.durationSeconds ?? 1);
+    }
+    return Math.max(1, (item.dtmf?.length ?? 0) * 6);
+  });
 }
 
 function MetricCard({

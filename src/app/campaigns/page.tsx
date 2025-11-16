@@ -4,6 +4,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { PageFrame, MotionCard, ShimmerTile } from "@/components/ui/LuxuryPrimitives";
 import { usePageLoading } from "@/hooks/usePageLoading";
+import { useLiveMetrics } from "@/hooks/useLiveMetrics";
+import type { LiveMetrics } from "@/hooks/useLiveMetrics";
 
 const Icons = {
   Refresh: (p: React.SVGProps<SVGSVGElement>) => (
@@ -32,138 +34,125 @@ const Icons = {
   ),
 };
 
-const STATUS = ["queued", "ringing", "answered", "voicemail", "no-answer", "busy", "failed", "completed"] as const;
+const STATUS = ["placing", "ringing", "answered", "completed", "failed", "hungup", "cancelled"] as const;
 
-function useMockCalls() {
-  const [rows, setRows] = useState(() => seed());
-  useEffect(() => {
-    const t = setInterval(() => {
-      setRows((prev) => tick(prev));
-    }, 1500);
-    return () => clearInterval(t);
-  }, []);
-  return rows;
-}
-
-function seed() {
-  const callers = ["+12125550123", "+13025550123", "+17185550123"];
-  const callees = ["+19293702263", "+13043144276", "+15105551234", "+17865550123", "+14435550123", "+18005550123"];
-  const s: Array<{
-    id: string;
-    time: number;
-    caller: string;
-    callee: string;
-    status: string;
-    duration: number;
-    cost: number;
-    dtmf: string | null;
-    recordingUrl: string | null;
-  }> = [];
-  for (let i = 0; i < 64; i++) {
-    const start = Date.now() - Math.floor(Math.random() * 1000 * 60 * 30);
-    const st = ["queued", "ringing", "answered", "voicemail", "no-answer"][Math.floor(Math.random() * 5)];
-    const dtmf = Math.random() < 0.25 ? randomDTMF() : null;
-    s.push({
-      id: `CF-${(100000 + i).toString(36)}`,
-      time: start,
-      caller: callers[Math.floor(Math.random() * callers.length)],
-      callee: callees[Math.floor(Math.random() * callees.length)],
-      status: st,
-      duration: st === "answered" || st === "voicemail" ? Math.floor(Math.random() * 240) + 10 : 0,
-      cost: +(Math.random() * 0.09 + 0.01).toFixed(4),
-      dtmf,
-      recordingUrl: Math.random() < 0.3 ? "#" : null,
-    });
-  }
-  return s;
-}
-
-function tick(prev: ReturnType<typeof seed>) {
-  return prev.map((r) => {
-    if (Math.random() > 0.1) return r;
-    const advance: Record<string, string> = {
-      queued: "ringing",
-      ringing: Math.random() < 0.5 ? "no-answer" : Math.random() < 0.5 ? "answered" : "voicemail",
-      answered: "completed",
-      voicemail: "completed",
-      "no-answer": "completed",
-    };
-    const next = advance[r.status] || r.status;
-    return {
-      ...r,
-      status: next,
-      duration: next === "completed" ? r.duration : r.duration + (Math.random() * 6 || 0),
-      dtmf: r.dtmf || (next === "answered" && Math.random() < 0.15 ? randomDTMF() : null),
-    };
-  });
-}
-
-function randomDTMF() {
-  const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "*", "#"];
-  const len = 1 + Math.floor(Math.random() * 4);
-  let out = "";
-  for (let i = 0; i < len; i++) {
-    out += keys[Math.floor(Math.random() * keys.length)];
-  }
-  return out;
-}
+type CallRow = {
+  id: string;
+  status: string;
+  callerId: string | null;
+  dialedNumber: string | null;
+  durationSeconds: number | null;
+  costCents: number | null;
+  dtmf: string | null;
+  createdAt: string;
+  campaign: { id: string; name: string };
+  lead: {
+    phoneNumber: string | null;
+    normalizedNumber?: string | null;
+    rawLine: string | null;
+  } | null;
+};
 
 function classNames(...a: Array<string | false | undefined>) {
   return a.filter(Boolean).join(" ");
 }
 
 export default function CampaignStatusPage() {
-  const rows = useMockCalls();
-  const { loading } = usePageLoading(720);
+    const { loading: introLoading } = usePageLoading(720);
+    const { data: metrics, loading: metricsLoading } = useLiveMetrics({ scope: "me", intervalMs: 5000 });
+    const [calls, setCalls] = useState<CallRow[]>([]);
+    const [loadingCalls, setLoadingCalls] = useState(true);
+    const [q, setQ] = useState("");
+    const [status, setStatus] = useState<string | "all">("all");
+    const [dtmfOnly, setDtmfOnly] = useState(false);
+    const [dtmfDigit, setDtmfDigit] = useState<string | null>(null);
+    const loading = introLoading || metricsLoading || loadingCalls;
 
-  const [q, setQ] = useState("");
-  const [status, setStatus] = useState<string | "all">("all");
-  const [dtmfOnly, setDtmfOnly] = useState(false);
+    useEffect(() => {
+      let active = true;
+      setLoadingCalls(true);
+      async function load() {
+        try {
+          const params = new URLSearchParams();
+          if (status !== "all") params.set("status", status.toUpperCase());
+          if (dtmfOnly) params.set("dtmfOnly", "true");
+          if (dtmfDigit) params.set("dtmf", dtmfDigit);
+          if (q.trim()) params.set("q", q.trim());
+          const res = await fetch(`/api/calls/live?${params.toString()}`, { cache: "no-store" });
+          if (!res.ok) throw new Error("Unable to load calls");
+          const data = await res.json();
+          if (active) {
+            setCalls(data.calls ?? []);
+            setLoadingCalls(false);
+          }
+        } catch {
+          if (active) {
+            setLoadingCalls(false);
+          }
+        }
+      }
+      load();
+      const timer = setInterval(load, 5000);
+      return () => {
+        active = false;
+        clearInterval(timer);
+      };
+    }, [status, dtmfOnly, dtmfDigit, q]);
 
-  const filtered = useMemo(() => {
-    return rows.filter((r) => {
-      if (q && !(`${r.callee} ${r.caller} ${r.id}`.toLowerCase().includes(q.toLowerCase()))) return false;
-      if (status !== "all" && r.status !== status) return false;
-      if (dtmfOnly && !r.dtmf) return false;
-      return true;
-    });
-  }, [rows, q, status, dtmfOnly]);
+    const filtered = useMemo(() => {
+      return calls.filter((r) => {
+        if (q && !(`${r.dialedNumber ?? ""} ${r.callerId ?? ""} ${r.id}`.toLowerCase().includes(q.toLowerCase()))) return false;
+        if (status !== "all" && r.status !== status) return false;
+        if (dtmfOnly && !r.dtmf) return false;
+        if (dtmfDigit && !r.dtmf?.startsWith(dtmfDigit)) return false;
+        return true;
+      });
+    }, [calls, q, status, dtmfOnly, dtmfDigit]);
 
-  const stats = useMemo(() => {
-    const total = rows.length;
-    const answered = rows.filter((r) => r.status === "answered" || (r.status === "completed" && r.duration > 0)).length;
-    const dtmf = rows.filter((r) => !!r.dtmf).length;
-    const spend = rows.reduce((s, r) => s + r.cost, 0);
-    return { total, answered, dtmf, spend: +spend.toFixed(2) };
-  }, [rows]);
+    const stats = useMemo(() => {
+      const total = metrics?.calls.total ?? 0;
+      const answered = metrics?.calls.answered ?? 0;
+      const dtmf = metrics?.calls.dtmf ?? 0;
+      const spend = ((metrics?.calls.costCents ?? 0) / 100).toFixed(2);
+      return { total, answered, dtmf, spend: +spend };
+    }, [metrics]);
 
-  function exportCsv() {
-    const header = ["id", "time", "caller", "callee", "status", "duration", "cost", "dtmf"].join(",");
-    const body = filtered
-      .map((r) =>
-        [r.id, new Date(r.time).toISOString(), r.caller, r.callee, r.status, r.duration, r.cost, r.dtmf || ""].join(","),
-      )
-      .join("\n");
-    const blob = new Blob([header + "\n" + body], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "campaign-status.csv";
-    a.click();
-    URL.revokeObjectURL(url);
-  }
+    function exportCsv() {
+      const header = ["id", "time", "caller", "callee", "status", "duration", "cost", "dtmf", "raw_line"].join(",");
+      const body = filtered
+        .map((r) =>
+          [
+            r.id,
+            new Date(r.createdAt).toISOString(),
+            r.callerId ?? "",
+            r.dialedNumber ?? "",
+            r.status,
+            r.durationSeconds ?? 0,
+            ((r.costCents ?? 0) / 100).toFixed(4),
+            r.dtmf ?? "",
+            (r.lead?.rawLine ?? "").replace(/,/g, " "),
+          ].join(","),
+        )
+        .join("\n");
+      const blob = new Blob([header + "\n" + body], { type: "text/csv" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "campaign-status.csv";
+      a.click();
+      URL.revokeObjectURL(url);
+    }
 
-  const statusChips = [
-    { key: "all", label: "All" },
-    { key: "queued", label: "Queued" },
-    { key: "ringing", label: "Ringing" },
-    { key: "answered", label: "Answered" },
-    { key: "voicemail", label: "Voicemail" },
-    { key: "no-answer", label: "No Answer" },
-    { key: "busy", label: "Busy" },
-    { key: "failed", label: "Failed" },
-    { key: "completed", label: "Completed" },
-  ];
+    const statusChips = [
+      { key: "all", label: "All" },
+      { key: "placing", label: "Placing" },
+      { key: "ringing", label: "Ringing" },
+      { key: "answered", label: "Answered" },
+      { key: "completed", label: "Completed" },
+      { key: "failed", label: "Failed" },
+      { key: "hungup", label: "Hung up" },
+      { key: "cancelled", label: "Cancelled" },
+    ];
 
   const exportAction = (
     <button
@@ -198,7 +187,12 @@ export default function CampaignStatusPage() {
           tone="violet"
           loading={loading}
         />
-        <Stat title="Spend" value={`$${stats.spend.toLocaleString()}`} tone="amber" loading={loading} />
+        <Stat
+          title="Spend"
+          value={`$${stats.spend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+          tone="amber"
+          loading={loading}
+        />
       </div>
 
       <MotionCard tone="neutral" className="p-6">
@@ -239,6 +233,17 @@ export default function CampaignStatusPage() {
             />
             DTMF only
           </label>
+            <button
+              onClick={() => setDtmfDigit((prev) => (prev === "1" ? null : "1"))}
+              className={classNames(
+                "inline-flex items-center gap-2 rounded-full px-4 py-2 text-xs font-medium ring-1 transition",
+                dtmfDigit === "1"
+                  ? "bg-emerald-500/20 text-emerald-600 ring-emerald-400/50 dark:bg-emerald-500/10 dark:text-emerald-300"
+                  : "bg-white/70 text-zinc-600 ring-white/55 hover:bg-white dark:bg-white/5 dark:text-zinc-300 dark:ring-white/10",
+              )}
+            >
+              {dtmfDigit === "1" ? "Clear \"1\"" : "Pressed 1"}
+            </button>
         </div>
 
         {loading ? (
@@ -251,7 +256,7 @@ export default function CampaignStatusPage() {
           <div className="mt-6 overflow-hidden rounded-3xl border border-white/45 bg-white/70 shadow-inner backdrop-blur dark:border-white/10 dark:bg-white/5">
             <div className="max-h-[520px] overflow-auto">
               <table className="min-w-full divide-y divide-white/60 text-sm dark:divide-white/10">
-                <thead className="bg-white/70 text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:bg-white/5 dark:text-zinc-400">
+                  <thead className="bg-white/70 text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:bg-white/5 dark:text-zinc-400">
                   <tr>
                     <th className="px-5 py-4 text-left">Time</th>
                     <th className="px-5 py-4 text-left">ID</th>
@@ -259,6 +264,7 @@ export default function CampaignStatusPage() {
                     <th className="px-5 py-4 text-left">Status</th>
                     <th className="px-5 py-4 text-left">Duration</th>
                     <th className="px-5 py-4 text-left">DTMF</th>
+                      <th className="px-5 py-4 text-left">Lead input</th>
                     <th className="px-5 py-4 text-left">Cost</th>
                   </tr>
                 </thead>
@@ -274,27 +280,36 @@ export default function CampaignStatusPage() {
                         transition={{ duration: 0.25 }}
                         className="transition hover:bg-white dark:hover:bg-white/5"
                       >
-                        <td className="px-5 py-4 whitespace-nowrap text-zinc-500 dark:text-zinc-400">
-                          {new Date(r.time).toLocaleTimeString()}
-                        </td>
+                          <td className="px-5 py-4 whitespace-nowrap text-zinc-500 dark:text-zinc-400">
+                            {new Date(r.createdAt).toLocaleTimeString()}
+                          </td>
                         <td className="px-5 py-4 font-mono text-xs text-zinc-600 dark:text-zinc-300">{r.id}</td>
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-2">
-                            <span className="font-semibold text-zinc-800 dark:text-zinc-100">{r.caller}</span>
+                              <span className="font-semibold text-zinc-800 dark:text-zinc-100">{r.callerId ?? "Unknown"}</span>
                             <span className="text-zinc-400">→</span>
-                            <span className="text-zinc-600 dark:text-zinc-200">{r.callee}</span>
+                              <span className="text-zinc-600 dark:text-zinc-200">{r.dialedNumber ?? "Unknown"}</span>
                           </div>
                         </td>
                         <td className="px-5 py-4">
                           <StatusBadge value={r.status} />
                         </td>
-                        <td className="px-5 py-4 tabular-nums text-zinc-600 dark:text-zinc-200">
-                          {r.duration ? `${r.duration}s` : "—"}
-                        </td>
-                        <td className="px-5 py-4 font-mono text-xs text-zinc-500 dark:text-zinc-300">{r.dtmf || ""}</td>
-                        <td className="px-5 py-4 tabular-nums text-zinc-700 dark:text-zinc-100">
-                          ${r.cost.toFixed(4)}
-                        </td>
+                          <td className="px-5 py-4 tabular-nums text-zinc-600 dark:text-zinc-200">
+                            {r.durationSeconds ? `${r.durationSeconds}s` : "—"}
+                          </td>
+                          <td className="px-5 py-4 font-mono text-xs text-zinc-500 dark:text-zinc-300">{r.dtmf || ""}</td>
+                          <td className="px-5 py-4 text-xs text-zinc-500 dark:text-zinc-300">
+                            {r.lead?.rawLine ? (
+                              <span title={r.lead.rawLine} className="line-clamp-2 max-w-xs">
+                                {r.lead.rawLine}
+                              </span>
+                            ) : (
+                              "—"
+                            )}
+                          </td>
+                          <td className="px-5 py-4 tabular-nums text-zinc-700 dark:text-zinc-100">
+                            ${((r.costCents ?? 0) / 100).toFixed(4)}
+                          </td>
                       </motion.tr>
                     ))}
                   </AnimatePresence>
@@ -306,7 +321,7 @@ export default function CampaignStatusPage() {
 
         <div className="mt-6 flex flex-wrap items-center gap-3 text-xs text-zinc-500 dark:text-zinc-400">
           <span>
-            Showing {loading ? "—" : filtered.length.toLocaleString()} of {rows.length.toLocaleString()} calls
+            Showing {loading ? "—" : filtered.length.toLocaleString()} of {calls.length.toLocaleString()} calls
           </span>
           <span className="inline-flex items-center gap-1 text-emerald-500 dark:text-emerald-300">
             <Icons.Refresh className="h-3.5 w-3.5" />
@@ -320,7 +335,7 @@ export default function CampaignStatusPage() {
 
 function StatusBadge({ value }: { value: string }) {
   const map: Record<string, { label: string; cls: string }> = {
-    queued: { label: "Queued", cls: "bg-white text-zinc-600 ring-white/60 dark:bg-white/10 dark:text-zinc-200 dark:ring-white/10" },
+    placing: { label: "Placing", cls: "bg-white text-zinc-600 ring-white/60 dark:bg-white/10 dark:text-zinc-200 dark:ring-white/10" },
     ringing: {
       label: "Ringing",
       cls: "bg-emerald-500/15 text-emerald-600 ring-emerald-400/40 dark:bg-emerald-500/15 dark:text-emerald-300 dark:ring-emerald-400/30",
@@ -328,18 +343,6 @@ function StatusBadge({ value }: { value: string }) {
     answered: {
       label: "Answered",
       cls: "bg-sky-500/15 text-sky-600 ring-sky-400/40 dark:bg-sky-500/15 dark:text-sky-300 dark:ring-sky-400/30",
-    },
-    voicemail: {
-      label: "Voicemail",
-      cls: "bg-violet-500/15 text-violet-600 ring-violet-400/40 dark:bg-violet-500/15 dark:text-violet-300 dark:ring-violet-400/30",
-    },
-    "no-answer": {
-      label: "No answer",
-      cls: "bg-amber-500/15 text-amber-700 ring-amber-400/40 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-400/30",
-    },
-    busy: {
-      label: "Busy",
-      cls: "bg-orange-500/15 text-orange-600 ring-orange-400/40 dark:bg-orange-500/15 dark:text-orange-300 dark:ring-orange-400/30",
     },
     failed: {
       label: "Failed",
@@ -349,8 +352,16 @@ function StatusBadge({ value }: { value: string }) {
       label: "Completed",
       cls: "bg-teal-500/15 text-teal-600 ring-teal-400/40 dark:bg-teal-500/15 dark:text-teal-300 dark:ring-teal-400/30",
     },
+    hungup: {
+      label: "Hung up",
+      cls: "bg-orange-500/15 text-orange-600 ring-orange-400/40 dark:bg-orange-500/15 dark:text-orange-300 dark:ring-orange-400/30",
+    },
+    cancelled: {
+      label: "Cancelled",
+      cls: "bg-zinc-500/15 text-zinc-200 ring-zinc-400/30 dark:bg-zinc-500/15 dark:text-zinc-200",
+    },
   };
-  const m = map[value] || map.queued;
+  const m = map[value] || map.placing;
   return (
     <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-[11px] font-semibold ring-1 ${m.cls}`}>
       <Icons.Dot className="h-1.5 w-1.5" />

@@ -83,6 +83,11 @@ const RATE_PER_LEAD = RATE_PER_LEAD_CENTS / 100;
 const PHONE_FRAGMENT_REGEX = /\+?\d[\d\s().-]{6,}\d/g;
 const SEGMENT_DELIMITER = /[\n,;]+/;
 
+type ParsedLead = {
+  phone: string;
+  raw: string;
+};
+
 const ICONS = {
   Upload: (props: React.SVGProps<SVGSVGElement>) => (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
@@ -116,12 +121,17 @@ const ICONS = {
   ),
 };
 
-function extractPhones(text: string, region: CountryCode = "US") {
-  const normalized = new Set<string>();
+function extractPhones(text: string, region: CountryCode = "US"): ParsedLead[] {
+  const normalized = new Map<string, string>();
   const detected = findPhoneNumbersInText(text, region);
   for (const match of detected) {
     const e164 = match.number?.number;
-    if (e164) normalized.add(e164);
+    if (e164) {
+      const raw = text.slice(match.startsAt ?? 0, match.endsAt ?? 0).trim();
+      if (!normalized.has(e164)) {
+        normalized.set(e164, raw || e164);
+      }
+    }
   }
   const segments = text
     .replace(/\r/g, "\n")
@@ -132,10 +142,15 @@ function extractPhones(text: string, region: CountryCode = "US") {
     const matches = segment.match(PHONE_FRAGMENT_REGEX) ?? [];
     for (const raw of matches) {
       const e164 = normalizePhoneNumber(raw, region);
-      if (e164) normalized.add(e164);
+      if (e164 && !normalized.has(e164)) {
+        normalized.set(e164, segment || raw.trim());
+      }
     }
   }
-  return Array.from(normalized);
+  return Array.from(normalized.entries()).map(([phone, raw]) => ({
+    phone,
+    raw,
+  }));
 }
 
 type CampaignState = {
@@ -164,18 +179,21 @@ export default function StartCampaignPage() {
   const [callerId, setCallerId] = useState("");
   const [selectedFlow, setSelectedFlow] = useState<string>("");
   const [selectedRoute, setSelectedRoute] = useState<string>("");
-  const [callsPerMinute, setCallsPerMinute] = useState(60);
-  const [maxConcurrentCalls, setMaxConcurrentCalls] = useState(10);
-  const [ringTimeout, setRingTimeout] = useState(45);
-  const [description, setDescription] = useState("");
+    const [callsPerMinute, setCallsPerMinute] = useState(60);
+    const [maxConcurrentCalls, setMaxConcurrentCalls] = useState(10);
+    const [ringTimeout, setRingTimeout] = useState(45);
+    const [description, setDescription] = useState("");
 
-  const [rawLeadText, setRawLeadText] = useState("");
-  const [leads, setLeads] = useState<string[]>([]);
-  const [campaign, setCampaign] = useState<CampaignState | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [starting, setStarting] = useState(false);
-  const [leadUploadResult, setLeadUploadResult] = useState<number>(0);
+    const [rawLeadText, setRawLeadText] = useState("");
+    const [leads, setLeads] = useState<ParsedLead[]>([]);
+    const [campaign, setCampaign] = useState<CampaignState | null>(null);
+    const [creating, setCreating] = useState(false);
+    const [uploading, setUploading] = useState(false);
+    const [starting, setStarting] = useState(false);
+    const [leadUploadResult, setLeadUploadResult] = useState<number>(0);
+    const [dtmfFeed, setDtmfFeed] = useState<any[]>([]);
+    const [dtmfFilter, setDtmfFilter] = useState<string | null>(null);
+    const [dtmfLoading, setDtmfLoading] = useState(false);
 
   const loadOptions = useCallback(async () => {
     try {
@@ -228,6 +246,42 @@ export default function StartCampaignPage() {
     setLeads(parsed);
   }, [rawLeadText]);
 
+    useEffect(() => {
+      if (!campaign?.id) {
+        setDtmfFeed([]);
+        return;
+      }
+      let active = true;
+      let initial = true;
+      async function load() {
+        if (initial) setDtmfLoading(true);
+        try {
+          const params = new URLSearchParams({ dtmfOnly: "true", limit: "25" });
+          const res = await fetch(`/api/campaigns/${campaign.id}/calls?${params.toString()}`, {
+            cache: "no-store",
+          });
+          if (!res.ok) {
+            return;
+          }
+          const data = await res.json().catch(() => null);
+          if (active) {
+            setDtmfFeed(data?.calls ?? []);
+          }
+        } finally {
+          if (initial && active) {
+            setDtmfLoading(false);
+            initial = false;
+          }
+        }
+      }
+      load();
+      const timer = setInterval(load, 6000);
+      return () => {
+        active = false;
+        clearInterval(timer);
+      };
+    }, [campaign?.id]);
+
   const handleFile = useCallback((file: File) => {
     const reader = new FileReader();
     reader.onload = () => {
@@ -239,17 +293,23 @@ export default function StartCampaignPage() {
     reader.readAsText(file);
   }, [push]);
 
-  const totalCost = useMemo(() => leads.length * RATE_PER_LEAD, [leads.length]);
+    const totalCost = useMemo(() => leads.length * RATE_PER_LEAD, [leads.length]);
 
-  const selectedRouteMeta = useMemo(
-    () => routes.find((route) => route.id === selectedRoute) ?? null,
-    [routes, selectedRoute]
-  );
+    const selectedRouteMeta = useMemo(
+      () => routes.find((route) => route.id === selectedRoute) ?? null,
+      [routes, selectedRoute]
+    );
 
-  const dialPreview = useMemo(() => {
-    if (!selectedRouteMeta || leads.length === 0) return null;
-    return toDialable(leads[0], selectedRouteMeta.trunkPrefix ?? undefined);
-  }, [selectedRouteMeta, leads]);
+    const dialPreview = useMemo(() => {
+      if (!selectedRouteMeta || leads.length === 0) return null;
+      return toDialable(leads[0].phone, selectedRouteMeta.trunkPrefix ?? undefined);
+    }, [selectedRouteMeta, leads]);
+
+    const dtmfResponses = useMemo(() => {
+      if (!dtmfFeed.length) return [];
+      if (!dtmfFilter) return dtmfFeed;
+      return dtmfFeed.filter((item) => item.dtmf?.startsWith(dtmfFilter));
+    }, [dtmfFeed, dtmfFilter]);
 
   const handleCreateCampaign = useCallback(async () => {
     if (!selectedFlow || !selectedRoute) {
@@ -320,11 +380,11 @@ export default function StartCampaignPage() {
       return;
     }
     try {
-      setUploading(true);
-      const payload = {
-        leads: leads.map((phone) => ({ phone })),
-        country: "US",
-      };
+        setUploading(true);
+        const payload = {
+          leads: leads.map((lead) => ({ phone: lead.phone, raw: lead.raw })),
+          country: "US",
+        };
       const res = await fetch(`/api/campaigns/${campaign.id}/leads`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -624,6 +684,48 @@ export default function StartCampaignPage() {
                   <span>DTMF: {campaign.totals.dtmf}</span>
                 </div>
               </div>
+                <div className="rounded-2xl border border-white/60 bg-white/60 p-4 dark:border-white/10 dark:bg-white/5">
+                  <div className="mb-2 flex items-center justify-between text-xs font-semibold uppercase tracking-[0.2em] text-zinc-500 dark:text-zinc-400">
+                    <span>DTMF responses</span>
+                    <button
+                      onClick={() => setDtmfFilter((current) => (current === "1" ? null : "1"))}
+                      className="rounded-full border border-emerald-400/40 px-3 py-1 text-[10px] font-semibold text-emerald-600 transition hover:bg-emerald-500/10 dark:text-emerald-300"
+                    >
+                      {dtmfFilter === "1" ? "Clear filter" : "Pressed 1"}
+                    </button>
+                  </div>
+                  {dtmfLoading ? (
+                    <div className="space-y-2">
+                      {Array.from({ length: 3 }).map((_, index) => (
+                        <ShimmerTile key={index} className="h-12 rounded-xl" />
+                      ))}
+                    </div>
+                  ) : dtmfResponses.length === 0 ? (
+                    <p className="text-xs text-zinc-500 dark:text-zinc-400">No digits captured yet.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {dtmfResponses.slice(0, 5).map((entry) => (
+                        <div key={entry.id} className="rounded-xl border border-white/50 bg-white/70 p-3 text-sm dark:border-white/10 dark:bg-white/5">
+                          <div className="flex items-center justify-between">
+                            <span className="font-semibold text-zinc-700 dark:text-zinc-200">
+                              {entry.lead?.phoneNumber ?? entry.dialedNumber ?? "Unknown"}
+                            </span>
+                            <span className="font-mono text-xs text-emerald-500 dark:text-emerald-300">{entry.dtmf}</span>
+                          </div>
+                          <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                            {new Date(entry.createdAt).toLocaleTimeString()}
+                          </div>
+                          {entry.lead?.rawLine ? (
+                            <details className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">
+                              <summary className="cursor-pointer text-emerald-500">View input line</summary>
+                              <p className="mt-1 break-words">{entry.lead.rawLine}</p>
+                            </details>
+                          ) : null}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
             </div>
           ) : (
             <div className="rounded-2xl border border-dashed border-white/60 bg-white/60 p-6 text-sm text-zinc-500 dark:border-white/10 dark:bg-white/5 dark:text-zinc-400">

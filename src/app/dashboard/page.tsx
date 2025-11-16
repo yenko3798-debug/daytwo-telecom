@@ -5,6 +5,8 @@ import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
 import { PageFrame, MotionCard, ShimmerTile, ShimmerRows } from "@/components/ui/LuxuryPrimitives";
 import { usePageLoading } from "@/hooks/usePageLoading";
+import { useLiveMetrics } from "@/hooks/useLiveMetrics";
+import type { LiveMetrics } from "@/hooks/useLiveMetrics";
 
 /* ---------------- minimal icons ---------------- */
 const I = {
@@ -46,28 +48,26 @@ function useTypewriter(words = ["campaigns", "top ups", "call flows", "analytics
             else { setDel(false); setIdx(i => i + 1); }
         }
         return () => clearTimeout(t);
-    }, [out, del, idx]);
+    }, [out, del, idx, words, speed, hold]);
     return out;
-}
-
-/* ---------------- mock stats (swap for API) ---------------- */
-function useMockStats() {
-    const [t, setT] = useState(0);
-    useEffect(() => { const id = setInterval(() => setT(x => x + 1), 1200); return () => clearInterval(id); }, []);
-    const asr = 41 + ((t * 3) % 7); // 41..47
-    const conv = 31 + (t % 5);    // 31..35
-    const cps = 8 + (t % 10);     // animated cps
-    const spend = (1234.56 + t * 0.37).toFixed(2);
-    return { asr, conv, cps, spend, t };
 }
 
 export default function StartPage() {
     const hello = useMemo(() => (typeof window !== "undefined" ? (new URLSearchParams(window.location.search).get("u") || "Daytwo") : "Daytwo"), []);
     const word = useTypewriter();
-    const { asr, conv, cps, spend, t } = useMockStats();
-    const sparkA = useMemo(() => roll(32, 12, 5), [t]);
-    const sparkB = useMemo(() => roll(32, 7, 3), [t]);
-    const { loading } = usePageLoading(680);
+    const { loading: introLoading } = usePageLoading(680);
+    const { data: metrics, loading: metricsLoading } = useLiveMetrics({ scope: "me", intervalMs: 5000 });
+    const loading = introLoading || metricsLoading;
+    const feed = useMemo(() => metrics?.feed ?? [], [metrics]);
+    const totalCalls = metrics?.calls.total ?? 0;
+    const answered = metrics?.calls.answered ?? 0;
+    const dtmfCount = metrics?.calls.dtmf ?? 0;
+    const asr = Math.round((answered / Math.max(totalCalls, 1)) * 100);
+    const conv = Math.round((dtmfCount / Math.max(totalCalls, 1)) * 100);
+    const cps = metrics?.cps ?? 0;
+    const spend = ((metrics?.calls.costCents ?? 0) / 100).toFixed(2);
+    const sparkA = useMemo(() => buildSpark(feed, "duration"), [feed]);
+    const sparkB = useMemo(() => buildSpark(feed, "dtmf"), [feed]);
 
     const headline = (
         <span className="inline-flex items-center rounded-md bg-emerald-500/15 px-2 py-0.5 font-semibold text-emerald-600 ring-1 ring-emerald-500/30">
@@ -99,13 +99,23 @@ export default function StartPage() {
             actions={actions}
         >
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                <DashboardStat title="Answered (ASR)" value={`${asr}%`} loading={loading} tone="emerald">
+                <DashboardStat
+                    title="Answered (ASR)"
+                    value={`${answered.toLocaleString()} • ${asr}%`}
+                    loading={loading}
+                    tone="emerald"
+                >
                     <Spark data={sparkA} className="h-8 w-full" />
                 </DashboardStat>
-                <DashboardStat title="DTMF conversion" value={`${conv}%`} loading={loading} tone="violet">
+                <DashboardStat
+                    title="DTMF conversion"
+                    value={`${dtmfCount.toLocaleString()} • ${conv}%`}
+                    loading={loading}
+                    tone="violet"
+                >
                     <Spark data={sparkB} className="h-8 w-full" />
                 </DashboardStat>
-                <DashboardStat title="Current CPS" value={String(cps)} loading={loading} />
+                <DashboardStat title="Current CPS" value={cps.toFixed(2)} loading={loading} />
                 <DashboardStat title="Total spend" value={`$${spend}`} loading={loading} tone="amber" />
             </div>
 
@@ -146,27 +156,21 @@ export default function StartPage() {
                                 Open feed
                             </Link>
                         </div>
-                        {loading ? (
-                            <div className="space-y-2">
-                                {Array.from({ length: 5 }).map((_, index) => (
-                                    <ShimmerTile key={index} className="h-10 rounded-xl" />
-                                ))}
-                            </div>
-                        ) : (
-                            <ActivityList />
-                        )}
+                        <ActivityList items={feed.slice(0, 12)} loading={loading} />
                     </MotionCard>
                 </MotionCard>
 
                 <MotionCard tone="emerald" className="space-y-4 p-6 text-emerald-300">
                     <div className="flex items-center justify-between text-sm">
                         <span className="font-semibold tracking-wide text-emerald-100">System health</span>
-                        <span className="text-[10px] uppercase tracking-[0.28em] text-emerald-300/70">Live</span>
+                        <span className="text-[10px] uppercase tracking-[0.28em] text-emerald-300/70">
+                            Live • {metrics ? new Date(metrics.timestamp).toLocaleTimeString() : "--"}
+                        </span>
                     </div>
                     <div className="grid grid-cols-3 gap-2 text-xs">
-                        <StatusPill label="Routes" value="Good" />
-                        <StatusPill label="Latency" value="Low" />
-                        <StatusPill label="Errors" value="0.4%" tone="amber" />
+                        <StatusPill label="Active campaigns" value={metrics?.campaigns.running ?? 0} />
+                        <StatusPill label="Active calls" value={metrics?.activeCalls ?? 0} />
+                        <StatusPill label="DTMF hits" value={dtmfCount} tone="amber" />
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                         <div className="rounded-2xl bg-black/30 p-3 ring-1 ring-emerald-400/20">
@@ -179,13 +183,17 @@ export default function StartPage() {
                         </div>
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-[11px] text-emerald-300/70">
-                        <div className="flex items-center gap-2">
-                            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                            Healthy routes
+                        <div className="flex flex-col gap-1">
+                            <span className="font-semibold text-emerald-200/90">Dialed vs connected</span>
+                            <span>
+                                {(metrics?.leads.dialed ?? 0).toLocaleString()} / {(metrics?.leads.connected ?? 0).toLocaleString()}
+                            </span>
                         </div>
-                        <div className="flex items-center gap-2">
-                            <span className="h-1.5 w-1.5 rounded-full bg-amber-300" />
-                            Minor retries
+                        <div className="flex flex-col gap-1">
+                            <span className="font-semibold text-emerald-200/90">CPS & spend</span>
+                            <span>
+                                {cps.toFixed(2)} cps • ${spend}
+                            </span>
                         </div>
                     </div>
                 </MotionCard>
@@ -253,7 +261,7 @@ function Action({ href, title, icon, children }) {
     );
 }
 
-function StatusPill({ label, value, tone }: { label: string; value: string; tone?: "emerald" | "amber" }) {
+function StatusPill({ label, value, tone }: { label: string; value: React.ReactNode; tone?: "emerald" | "amber" }) {
     const palette =
         tone === "amber"
             ? "bg-amber-500/15 text-amber-300 ring-amber-400/30"
@@ -266,16 +274,46 @@ function StatusPill({ label, value, tone }: { label: string; value: string; tone
     );
 }
 
-function ActivityList() {
-    const [rows, setRows] = useState(() => seed());
-    useEffect(() => { const id = setInterval(() => setRows(r => [one(), ...r.slice(0, 9)]), 1800); return () => clearInterval(id); }, []);
+function ActivityList({ items, loading }: { items: LiveMetrics["feed"]; loading?: boolean }) {
+    const rows = items?.slice(0, 10) ?? [];
+    if (loading) {
+        return (
+            <div className="space-y-2">
+                {Array.from({ length: 5 }).map((_, index) => (
+                    <ShimmerTile key={index} className="h-10 rounded-xl" />
+                ))}
+            </div>
+        );
+    }
+    if (!rows.length) {
+        return <div className="text-sm text-zinc-500 dark:text-zinc-400">No live calls yet. Launch a campaign to populate this feed.</div>;
+    }
     return (
         <div className="divide-y divide-zinc-900/10 dark:divide-white/10">
             <AnimatePresence initial={false}>
-                {rows.map(r => (
-                    <motion.div key={r.id} initial={{ opacity: 0, y: -6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className="flex items-center justify-between gap-3 py-2">
-                        <div className="text-sm"><span className="font-medium text-zinc-900 dark:text-zinc-100">{r.caller}</span> → <span className="text-zinc-700 dark:text-zinc-200">{r.callee}</span> <span className="text-zinc-500">• {r.status}</span></div>
-                        <div className="text-xs text-zinc-500">{new Date(r.time).toLocaleTimeString()}</div>
+                {rows.map((r) => (
+                    <motion.div
+                        key={r.id}
+                        initial={{ opacity: 0, y: -6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -6 }}
+                        className="flex flex-col gap-1 py-2"
+                    >
+                        <div className="flex flex-wrap items-center gap-2 text-sm">
+                            <span className="font-medium text-zinc-900 dark:text-zinc-100">{r.callerId ?? "Unknown"}</span>
+                            <span className="text-zinc-500">→</span>
+                            <span className="text-zinc-700 dark:text-zinc-200">{r.dialedNumber ?? "—"}</span>
+                            <StatusBadge value={r.status} />
+                            {r.dtmf ? (
+                                <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 font-mono text-[11px] text-emerald-600 dark:text-emerald-300">
+                                    DTMF {r.dtmf}
+                                </span>
+                            ) : null}
+                        </div>
+                        <div className="flex justify-between text-xs text-zinc-500 dark:text-zinc-400">
+                            <span>{new Date(r.createdAt).toLocaleTimeString()} • {r.campaign.name}</span>
+                            {r.lead?.rawLine ? <span className="truncate text-right" title={r.lead.rawLine}>{r.lead.rawLine}</span> : null}
+                        </div>
                     </motion.div>
                 ))}
             </AnimatePresence>
@@ -296,11 +334,47 @@ function TipsList({ loading }: { loading?: boolean }) {
     );
 }
 
-/* ---- tiny feed helpers ---- */
-function seed() { const a = []; for (let i = 0; i < 10; i++) a.push(one()); return a; }
-function one() {
-    const statuses = ["answered", "voicemail", "no-answer", "busy", "failed", "completed"]; const callers = ["+12125550123", "+13025550123", "+17185550123"]; const callee = "+1" + String(Math.floor(1e9 + Math.random() * 9e9));
-    return { id: Math.random().toString(36).slice(2, 8), time: Date.now() - Math.floor(Math.random() * 1000 * 60), caller: callers[Math.floor(Math.random() * callers.length)], callee, status: statuses[Math.floor(Math.random() * statuses.length)] };
+function StatusBadge({ value }: { value: string }) {
+    const map: Record<string, { label: string; cls: string }> = {
+        placing: { label: "Placing", cls: "bg-white text-zinc-600 ring-white/60 dark:bg-white/10 dark:text-zinc-200 dark:ring-white/10" },
+        ringing: { label: "Ringing", cls: "bg-emerald-500/15 text-emerald-600 ring-emerald-400/40 dark:bg-emerald-500/15 dark:text-emerald-300" },
+        answered: { label: "Answered", cls: "bg-sky-500/15 text-sky-600 ring-sky-400/40 dark:text-sky-300" },
+        completed: { label: "Completed", cls: "bg-teal-500/15 text-teal-600 ring-teal-400/40 dark:text-teal-300" },
+        failed: { label: "Failed", cls: "bg-rose-500/15 text-rose-600 ring-rose-400/40 dark:text-rose-300" },
+        hungup: { label: "Hung up", cls: "bg-orange-500/15 text-orange-600 ring-orange-400/40 dark:text-orange-300" },
+        cancelled: { label: "Cancelled", cls: "bg-zinc-500/15 text-zinc-200 ring-zinc-400/30 dark:bg-zinc-500/15 dark:text-zinc-200" },
+    };
+    const badge = map[value] || map.placing;
+    return (
+        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold ring-1 ${badge.cls}`}>
+            <span className="h-1.5 w-1.5 rounded-full bg-current" />
+            {badge.label}
+        </span>
+    );
 }
 
-function roll(n = 24, base = 10, jitter = 4) { const a = []; let v = base; for (let i = 0; i < n; i++) { v = Math.max(1, v + (Math.random() * jitter * 2 - jitter)); a.push(+v.toFixed(1)); } return a; }
+function buildSpark(feed: LiveMetrics["feed"] | undefined, mode: "duration" | "dtmf") {
+    if (!feed || feed.length < 4) {
+        return roll(32, mode === "duration" ? 12 : 7, 4);
+    }
+    const values = feed.slice(0, 32).map((item) => {
+        if (mode === "duration") {
+            return Math.max(1, item.durationSeconds || 1);
+        }
+        if (item.dtmf) {
+            return Math.max(1, item.dtmf.length * 6);
+        }
+        return 1;
+    });
+    return values;
+}
+
+function roll(n = 24, base = 10, jitter = 4) {
+    const a: number[] = [];
+    let v = base;
+    for (let i = 0; i < n; i++) {
+        v = Math.max(1, v + (Math.random() * jitter * 2 - jitter));
+        a.push(+v.toFixed(1));
+    }
+    return a;
+}

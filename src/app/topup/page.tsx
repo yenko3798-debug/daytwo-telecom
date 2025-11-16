@@ -73,14 +73,15 @@ function useToast() {
     },
     [setToasts]
   );
-  useEffect(() => {
-    return () => {
-      timers.current.forEach((handle) => {
-        window.clearTimeout(handle);
-      });
-      timers.current.clear();
-    };
-  }, []);
+    useEffect(() => {
+      const activeTimers = timers.current;
+      return () => {
+        activeTimers.forEach((handle) => {
+          window.clearTimeout(handle);
+        });
+        activeTimers.clear();
+      };
+    }, []);
   function View() {
     return (
       <div className="pointer-events-none fixed right-4 top-4 z-[60] flex max-w-sm flex-col items-end space-y-2">
