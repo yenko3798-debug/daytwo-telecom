@@ -541,7 +541,8 @@ export async function completeCallSession(
   if (payload.costCents !== undefined) {
     updates.costCents = payload.costCents ?? undefined;
   }
-  if (payload.dtmf !== undefined) {
+  const hasDigits = typeof payload.dtmf === "string" && payload.dtmf.length > 0;
+  if (hasDigits) {
     updates.dtmf = payload.dtmf;
   }
 
@@ -566,7 +567,7 @@ export async function completeCallSession(
         leadUpdate.status = LeadStatus.FAILED;
       }
     }
-    if (payload.dtmf !== undefined) {
+    if (hasDigits) {
       leadUpdate.dtmf = payload.dtmf;
     }
     if (Object.keys(leadUpdate).length > 0) {
@@ -575,7 +576,7 @@ export async function completeCallSession(
         data: leadUpdate,
       });
     }
-    if (payload.dtmf && !session.dtmf) {
+    if (hasDigits && !session.dtmf) {
       await tx.campaign.update({
         where: { id: session.campaignId },
         data: {

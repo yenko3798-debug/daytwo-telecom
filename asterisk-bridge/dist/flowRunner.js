@@ -384,14 +384,9 @@ async function runFlow(state) {
             }
             case "hangup": {
                 state.completed = true;
-                await new Promise((resolve, reject) => {
-                    state.channel.hangup({ reason: node.reason ?? "completed" }, (error) => {
-                        if (error)
-                            reject(error);
-                        else
-                            resolve();
-                    });
-                });
+                await new Promise((resolve) => {
+                    state.channel.hangup({ reason: node.reason ?? "completed" }, () => resolve());
+                }).catch(() => { });
                 return;
             }
             default:
