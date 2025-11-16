@@ -252,9 +252,48 @@ async function ensureMedia(playback: Playback) {
       ? await downloadToCache(playback.url)
       : await synthesizeTts(playback.text, playback.voice, playback.language);
   const variants = await ensureNormalizedVariants(file);
-  const basePath = relative(config.soundsRoot, variants.ulaw).replace(/\\/g, "/").replace(/\.ulaw$/, "");
+  const relativePath = relative(config.soundsRoot, variants.ulaw).replace(/\\/g, "/").replace(/\.ulaw$/, "");
+  if (relativePath.startsWith("..")) {
+    throw new Error("Media files must be inside ASTERISK_SOUNDS_ROOT");
+  }
+  const sanitizedPath = relativePath.replace(/^\/+/, "");
   const prefix = normalizePrefix(config.soundPrefix);
-  return `sound:${prefix}${basePath}`;
+  const needsPrefix = prefix.length > 0 && sanitizedPath.startsWith(prefix) ? sanitizedPath : `${prefix}${sanitizedPath}`;
+  return `sound:${needsPrefix}`;
+}
+
+const playbackMediaCache = new Map<string, Promise<string>>();
+
+function playbackCacheKey(playback: Playback) {
+  if (playback.mode === "file") {
+    return `file:${playback.url}`;
+  }
+  return `tts:${playback.language ?? ""}:${playback.voice ?? ""}:${playback.text}`;
+}
+
+function loadPlaybackMedia(playback: Playback) {
+  const key = playbackCacheKey(playback);
+  let task = playbackMediaCache.get(key);
+  if (!task) {
+    task = ensureMedia(playback).catch((error) => {
+      playbackMediaCache.delete(key);
+      throw error;
+    });
+    playbackMediaCache.set(key, task);
+  }
+  return task;
+}
+
+async function warmFlowMedia(flow: FlowDefinition) {
+  const tasks: Promise<string>[] = [];
+  for (const node of flow.nodes) {
+    if (node.type === "play") {
+      tasks.push(loadPlaybackMedia(node.playback));
+    } else if (node.type === "gather" && node.prompt) {
+      tasks.push(loadPlaybackMedia(node.prompt));
+    }
+  }
+  await Promise.allSettled(tasks);
 }
 
 async function notifyPanel(event: string, body: Record<string, any>) {
@@ -338,7 +377,7 @@ async function handleGather(state: SessionState, node: GatherNode): Promise<stri
   let attempt = 0;
   while (attempt < node.attempts) {
     if (node.prompt) {
-      const media = await ensureMedia(node.prompt);
+      const media = await loadPlaybackMedia(node.prompt);
       await playMedia(state.channel, media);
     }
     const digits = await new Promise<string>((resolve, reject) => {
@@ -366,6 +405,14 @@ async function handleGather(state: SessionState, node: GatherNode): Promise<stri
     if (digits.length >= node.minDigits) {
       state.variables[node.variable] = digits;
       state.digits += digits;
+      const aggregateDigits = state.digits;
+      notifyPanel("call.dtmf", {
+        sessionId: state.sessionId,
+        channelId: state.channelId,
+        dtmf: aggregateDigits,
+        digits,
+        variable: node.variable,
+      });
       const branch = node.branches[digits] ?? node.defaultNext;
       return branch ?? null;
     }
@@ -457,7 +504,7 @@ async function runFlow(state: SessionState) {
     }
     switch (node.type) {
       case "play": {
-        const media = await ensureMedia(node.playback);
+        const media = await loadPlaybackMedia(node.playback);
         await playMedia(state.channel, media);
         current = node.next ?? null;
         break;
@@ -527,6 +574,9 @@ async function handleSessionStart(event: any, channel: any) {
   const payload = await fetchSession(sessionId);
   const state = createSessionState(payload, channel);
   sessionsByChannel.set(channel.id, state);
+  warmFlowMedia(state.flow).catch((error: any) => {
+    console.error(`Media warmup failed: ${error?.message ?? error}`);
+  });
   await new Promise<void>((resolve, reject) => {
     channel.answer((error: any) => {
       if (error) reject(error);

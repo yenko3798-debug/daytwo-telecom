@@ -22,6 +22,7 @@ const statusMap: Record<string, CallStatus> = {
   "call.hungup": CallStatus.HUNGUP,
   "call.canceled": CallStatus.CANCELLED,
 };
+const dtmfEvents = new Set(["call.dtmf"]);
 
 export async function POST(req: Request) {
   try {
@@ -29,7 +30,8 @@ export async function POST(req: Request) {
     const body = payloadSchema.parse(raw);
 
     const status = statusMap[body.event];
-    if (!status) {
+    const isDtmfEvent = dtmfEvents.has(body.event);
+    if (!status && !isDtmfEvent) {
       return NextResponse.json({ error: "Unsupported event" }, { status: 400 });
     }
 
@@ -44,6 +46,17 @@ export async function POST(req: Request) {
 
     if (!sessionId) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
+    }
+
+    if (isDtmfEvent) {
+      if (!body.dtmf || body.dtmf.length === 0) {
+        return NextResponse.json({ error: "DTMF digits required" }, { status: 400 });
+      }
+      await completeCallSession(sessionId, {
+        dtmf: body.dtmf,
+        metadata: body.metadata ?? null,
+      });
+      return NextResponse.json({ ok: true });
     }
 
     await completeCallSession(sessionId, {
