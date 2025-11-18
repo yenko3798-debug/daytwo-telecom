@@ -25,7 +25,7 @@ export async function POST(req: Request) {
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
-    const role = email === "admin@foe.dev" ? UserRole.ADMIN : UserRole.USER;
+    const role = email === "admin@auratelecom.com" ? UserRole.ADMIN : UserRole.USER;
 
     const user = await prisma.user.create({
       data: { name, email, passwordHash, balanceCents: 0, role },

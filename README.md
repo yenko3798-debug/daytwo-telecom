@@ -1,6 +1,6 @@
-# Spotlight
+# AURA Telecom
 
-Spotlight is a [Tailwind Plus](https://tailwindcss.com/plus) site template built using [Tailwind CSS](https://tailwindcss.com) and [Next.js](https://nextjs.org).
+AURA Telecom is an enterprise outbound dialer platform built using [Tailwind CSS](https://tailwindcss.com) and [Next.js](https://nextjs.org).
 
 ## Getting started
 
@@ -61,12 +61,12 @@ Use the checklist below to connect the outbound dialer to an Asterisk instance v
    - Note the base URL such as `https://pbx.example.com/ari`.
 
 3. **Create a Stasis application**  
-   - In `ari.conf`, ensure `app = spotlight` matches your `ARI_APPLICATION`.  
+   - In `ari.conf`, ensure `app = aura` matches your `ARI_APPLICATION`.  
    - In `extensions.conf` (or your PJSIP dialplan), route outbound calls into Stasis:  
      ```
      [outbound]
-     exten => _X.,1,NoOp(Outbound via Spotlight)
-       same => n,Stasis(spotlight,${ARG1},${ARG2},${ARG3})
+     exten => _X.,1,NoOp(Outbound via AURA)
+       same => n,Stasis(aura,${ARG1},${ARG2},${ARG3})
      ```
      The arguments will receive `campaign_id`, `lead_id`, `session_id`, `flow_id`, `flow_version` respectively.
 
@@ -78,9 +78,9 @@ Use the checklist below to connect the outbound dialer to an Asterisk instance v
    Add the following to `.env.local` (or your deployment secrets):
    ```
    ARI_BASE_URL=https://pbx.example.com/ari
-   ARI_USERNAME=lux
+   ARI_USERNAME=aura
    ARI_PASSWORD=replace-with-ari-password
-   ARI_APPLICATION=spotlight
+   ARI_APPLICATION=aura
    ARI_CONTEXT=outbound
    ARI_EXTENSION=s
    ARI_INTERNAL_TOKEN=replace-with-long-random-string

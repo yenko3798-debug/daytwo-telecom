@@ -44,7 +44,7 @@ export default function LandingPage(){
           <div className="flex items-center justify-between py-5">
             <div className="flex items-center gap-2 text-sm font-semibold text-emerald-500">
               <span className="inline-flex h-6 w-6 items-center justify-center rounded-md bg-emerald-500/15 ring-1 ring-emerald-400/30"><Icon.Phone className="h-3.5 w-3.5"/></span>
-              Daytwo Telecom
+              AURA Telecom
             </div>
             <div className="flex items-center gap-2">
               <Link href="/auth" className="rounded-lg px-3 py-1.5 text-sm text-zinc-700 ring-1 ring-zinc-900/10 transition hover:bg-zinc-900/5 dark:text-zinc-200 dark:ring-white/10 dark:hover:bg-white/10">Sign in</Link>
@@ -61,14 +61,14 @@ export default function LandingPage(){
         <section className="relative z-10 mx-auto max-w-7xl pb-20 pt-10 sm:pt-16">
           <motion.div initial={{opacity:0,y:12}} animate={{opacity:1,y:0}} transition={{duration:.6}} className="mx-auto max-w-3xl text-center">
             <div className="mx-auto inline-flex items-center gap-2 rounded-full bg-white/60 px-3 py-1 text-xs font-semibold text-emerald-600 ring-1 ring-zinc-900/10 backdrop-blur dark:bg-zinc-900/60 dark:text-emerald-400 dark:ring-white/10">
-              <Icon.Sparkle className="h-4 w-4"/> Press‑1 Voice Campaigns • Real‑time Analytics • TTS/Audio IVR
+              <Icon.Sparkle className="h-4 w-4"/> The best way to run telecom campaigns.
             </div>
             <h1 className="mt-5 text-4xl font-extrabold tracking-tight text-zinc-900 dark:text-zinc-100 sm:text-6xl">
               Run <span className="bg-gradient-to-r from-emerald-400 via-violet-400 to-emerald-400 bg-clip-text text-transparent">telecom campaigns</span> at luxury‑grade speed
             </h1>
             <p className="mx-auto mt-4 max-w-xl text-balance text-sm text-zinc-600 dark:text-zinc-300">
               Upload leads, throttle CPS, capture DTMF, preview flows, and track results in a single elegant dashboard.
-              Top up securely and deploy in minutes.
+              Top up securely and start calling in minutes.
             </p>
             <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
               <Link href="/auth" className="inline-flex items-center gap-2 rounded-xl bg-emerald-500 px-5 py-2 text-sm font-semibold text-white shadow ring-1 ring-emerald-500/30 transition hover:-translate-y-0.5 hover:bg-emerald-500/90">
@@ -111,7 +111,7 @@ export default function LandingPage(){
                       <span className="h-2.5 w-2.5 rounded-full bg-amber-400/70"/>
                       <span className="h-2.5 w-2.5 rounded-full bg-emerald-400/70"/>
                     </div>
-                    <span>Daytwo Studio</span>
+                    <span>AURA Studio</span>
                   </div>
                   <div className="grid grid-cols-2 gap-3 p-3">
                     <div className="rounded-xl bg-white/5 p-3 ring-1 ring-white/10">
@@ -156,7 +156,7 @@ export default function LandingPage(){
         <Container>
           <div className="mx-auto max-w-5xl text-center">
             <h2 className="text-2xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100">Everything you need to launch</h2>
-            <p className="mx-auto mt-2 max-w-xl text-sm text-zinc-600 dark:text-zinc-300">From top ups to IVR logic to live analytics, Daytwo gives you the full toolkit with luxury‑grade UI and sane defaults.</p>
+            <p className="mx-auto mt-2 max-w-xl text-sm text-zinc-600 dark:text-zinc-300">From top ups to IVR logic to live analytics, AURA gives you the full toolkit with enterprise‑grade UI and powerful features.</p>
           </div>
           <div className="mx-auto mt-8 grid max-w-6xl grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {[
@@ -199,7 +199,7 @@ export default function LandingPage(){
       {/* footer */}
       <footer className="relative z-10 border-t border-white/10 py-8 text-center text-xs text-zinc-500">
         <Container>
-          © {new Date().getFullYear()} Daytwo Telecom • <Link className="underline hover:text-zinc-700" href="/auth">Sign in</Link>
+          © {new Date().getFullYear()} AURA Telecom • <Link className="underline hover:text-zinc-700" href="/auth">Sign in</Link>
         </Container>
       </footer>
     </div>

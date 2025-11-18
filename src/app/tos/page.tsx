@@ -32,7 +32,7 @@ export default function TermsPage(){
 
           <div className="grid grid-cols-1 gap-4">
             <Section title="1. Acceptance of Terms">
-              <p>By accessing or using the Daytwo Telecom platform (the “Service”), you agree to be bound by these Terms of Service (“Terms”). If you do not agree, do not use the Service.</p>
+              <p>By accessing or using the AURA Telecom platform (the "Service"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree, do not use the Service.</p>
             </Section>
 
             <Section title="2. Description of Service">
@@ -84,12 +84,12 @@ export default function TermsPage(){
             </Section>
 
             <Section title="10. Limitation of Liability">
-              <p>TO THE MAXIMUM EXTENT PERMITTED BY LAW, IN NO EVENT WILL DAYTWO TELECOM, ITS AFFILIATES, OR THEIR OFFICERS, DIRECTORS, EMPLOYEES, AGENTS, OR SUPPLIERS BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY, OR PUNITIVE DAMAGES, OR FOR ANY LOSS OF PROFITS, REVENUE, DATA, GOODWILL, OR BUSINESS INTERRUPTION, ARISING OUT OF OR RELATED TO YOUR USE OF (OR INABILITY TO USE) THE SERVICE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.</p>
+              <p>TO THE MAXIMUM EXTENT PERMITTED BY LAW, IN NO EVENT WILL AURA TELECOM, ITS AFFILIATES, OR THEIR OFFICERS, DIRECTORS, EMPLOYEES, AGENTS, OR SUPPLIERS BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY, OR PUNITIVE DAMAGES, OR FOR ANY LOSS OF PROFITS, REVENUE, DATA, GOODWILL, OR BUSINESS INTERRUPTION, ARISING OUT OF OR RELATED TO YOUR USE OF (OR INABILITY TO USE) THE SERVICE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGES.</p>
               <p>OUR TOTAL AGGREGATE LIABILITY FOR ALL CLAIMS RELATING TO THE SERVICE WILL NOT EXCEED THE GREATER OF <strong>THE AMOUNT PAID BY YOU TO US IN THE TWELVE (12) MONTHS PRECEDING THE EVENT GIVING RISE TO LIABILITY OR ONE HUNDRED U.S. DOLLARS (US$100)</strong>. SOME JURISDICTIONS DO NOT ALLOW LIMITATIONS; IN SUCH CASES, THE ABOVE LIMITS APPLY TO THE FULLEST EXTENT PERMITTED.</p>
             </Section>
 
             <Section title="11. Indemnification (You Hold Us Harmless)">
-              <p>You will defend, indemnify, and hold harmless Daytwo Telecom and its affiliates, officers, directors, employees, and agents from and against any and all claims, liabilities, damages, losses, and expenses (including reasonable attorneys’ fees) arising from or related to: (a) your use of the Service; (b) your content, leads, or recordings; (c) your violation of these Terms or applicable law (including telemarketing and privacy laws); or (d) any dispute between you and any third party.</p>
+              <p>You will defend, indemnify, and hold harmless AURA Telecom and its affiliates, officers, directors, employees, and agents from and against any and all claims, liabilities, damages, losses, and expenses (including reasonable attorneys' fees) arising from or related to: (a) your use of the Service; (b) your content, leads, or recordings; (c) your violation of these Terms or applicable law (including telemarketing and privacy laws); or (d) any dispute between you and any third party.</p>
             </Section>
 
             <Section title="12. Termination">
@@ -100,7 +100,7 @@ export default function TermsPage(){
               <ul>
                 <li>These Terms are governed by the laws of the State of New York, without regard to conflict‑of‑laws rules.</li>
                 <li><strong>Binding Arbitration:</strong> Any dispute arising under these Terms will be resolved exclusively by final and binding arbitration administered by JAMS in New York County, NY, in English, before a single arbitrator. Judgment on the award may be entered in any court of competent jurisdiction.</li>
-                <li><strong>Class Action Waiver:</strong> YOU AND DAYTWO TELECOM AGREE THAT EACH MAY BRING CLAIMS AGAINST THE OTHER ONLY IN YOUR OR ITS <em>INDIVIDUAL</em> CAPACITY, AND NOT AS A PLAINTIFF OR CLASS MEMBER IN ANY PURPORTED CLASS OR REPRESENTATIVE PROCEEDING.</li>
+                <li><strong>Class Action Waiver:</strong> YOU AND AURA TELECOM AGREE THAT EACH MAY BRING CLAIMS AGAINST THE OTHER ONLY IN YOUR OR ITS <em>INDIVIDUAL</em> CAPACITY, AND NOT AS A PLAINTIFF OR CLASS MEMBER IN ANY PURPORTED CLASS OR REPRESENTATIVE PROCEEDING.</li>
               </ul>
             </Section>
 
@@ -109,7 +109,7 @@ export default function TermsPage(){
             </Section>
 
             <Section title="15. Contact">
-              <p>Questions about these Terms? Contact us at <a className="underline" href="mailto:support@daytwo.app">support@daytwo.app</a>.</p>
+              <p>Questions about these Terms? Contact us at <a className="underline" href="mailto:support@auratelecom.com">support@auratelecom.com</a>.</p>
             </Section>
 
             <Section title="Important Notice (Not Legal Advice)">

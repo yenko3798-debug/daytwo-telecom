@@ -107,7 +107,7 @@ export default function AuthIntegratedPage() {
                     {/* Left copy */}
                     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
                         <div className="inline-flex items-center gap-2 rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-semibold text-emerald-500 ring-1 ring-emerald-500/30">
-                            Daytwo Telecom
+                            AURA Telecom
                         </div>
                         <h1 className="mt-4 text-3xl font-bold tracking-tight text-zinc-900 dark:text-zinc-100 sm:text-4xl">
                             {mode === "signin" ? "Welcome back" : "Create your account"}
@@ -116,9 +116,9 @@ export default function AuthIntegratedPage() {
                             Manage campaigns, top up balance, and view real-time call analytics. One account unlocks your full telephony suite.
                         </p>
                         <ul className="mt-6 space-y-2 text-sm text-zinc-600 dark:text-zinc-300">
-                            <li className="flex items-center gap-2"><Icon.Check className="h-4 w-4 text-emerald-500" /> Secure sessions (HttpOnly cookies)</li>
-                            <li className="flex items-center gap-2"><Icon.Check className="h-4 w-4 text-emerald-500" /> Passwords hashed with bcrypt</li>
-                            <li className="flex items-center gap-2"><Icon.Check className="h-4 w-4 text-emerald-500" /> Ready for 2FA & role-based access</li>
+                            <li className="flex items-center gap-2"><Icon.Check className="h-4 w-4 text-emerald-500" /> Enterprise-grade security</li>
+                            <li className="flex items-center gap-2"><Icon.Check className="h-4 w-4 text-emerald-500" /> Bank-level encryption</li>
+                            <li className="flex items-center gap-2"><Icon.Check className="h-4 w-4 text-emerald-500" /> 2FA & role-based access control</li>
                         </ul>
                     </motion.div>
 
@@ -253,7 +253,7 @@ export default function AuthIntegratedPage() {
                             </form>
 
                             <p className="mt-3 text-center text-[11px] text-zinc-500">
-                                Protected by HttpOnly cookies. Read our{" "}
+                                Secure authentication. Read our{" "}
                                 <a className="underline" href="/terms" target="_blank">
                                     Terms
                                 </a>

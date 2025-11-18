@@ -5,12 +5,12 @@ import '@/styles/tailwind.css'
 
 export const metadata = {
   title: {
-    template: '%s - @Foe',
+    template: '%s - AURA Telecom',
     default:
-      'AURA Services',
+      'AURA Telecom - Enterprise Outbound Dialer',
   },
   description:
-    'AURA Services | SAAS Outbound Dialer',
+    'AURA Telecom | Enterprise Outbound Dialer Platform',
   alternates: {
     types: {
       'application/rss+xml': `${process.env.NEXT_PUBLIC_SITE_URL}/feed.xml`,

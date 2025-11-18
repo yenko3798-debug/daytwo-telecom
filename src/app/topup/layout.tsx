@@ -4,7 +4,7 @@ import { getSession } from "@/lib/auth";
 import { redirect } from "next/navigation";
 
 export default async function TelecomLayout({ children }: { children: ReactNode }) {
-  const session = await getSession(); // reads HttpOnly cookie
+  const session = await getSession();
   if (!session) redirect("/auth");
   return <>{children}</>;
 }

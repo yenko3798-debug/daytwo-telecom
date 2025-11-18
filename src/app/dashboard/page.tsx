@@ -53,7 +53,7 @@ function useTypewriter(words = ["campaigns", "top ups", "call flows", "analytics
 }
 
 export default function StartPage() {
-    const hello = useMemo(() => (typeof window !== "undefined" ? (new URLSearchParams(window.location.search).get("u") || "Daytwo") : "Daytwo"), []);
+    const hello = useMemo(() => (typeof window !== "undefined" ? (new URLSearchParams(window.location.search).get("u") || "there") : "there"), []);
     const word = useTypewriter();
     const { loading: introLoading } = usePageLoading(680);
     const { data: metrics, loading: metricsLoading } = useLiveMetrics({ scope: "me", intervalMs: 5000 });

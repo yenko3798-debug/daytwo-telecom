@@ -72,20 +72,12 @@ export default function PricingPage() {
       unit: yearly ? "/year" : "/month",
       caption: "$150 per 1,000 calls",
       cta: (
-        <>
-          <Link
-            href="/topup"
-            className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 px-4 py-2 text-sm font-semibold text-white shadow-[0_16px_32px_rgba(13,148,136,0.35)] transition hover:-translate-y-0.5 hover:shadow-[0_22px_40px_rgba(13,148,136,0.45)]"
-          >
-            Get Started <Icon.Arrow className="h-4 w-4" />
-          </Link>
-          <Link
-            href="/auth"
-            className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-emerald-400/20 to-teal-400/20 px-4 py-2 text-sm font-semibold text-emerald-700 ring-1 ring-emerald-500/30 transition hover:-translate-y-0.5 hover:from-emerald-400/30 hover:to-teal-400/30 dark:text-emerald-300 dark:ring-emerald-400/30"
-          >
-            Create account
-          </Link>
-        </>
+        <Link
+          href="/topup"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 px-4 py-2 text-sm font-semibold text-white shadow-[0_16px_32px_rgba(13,148,136,0.35)] transition hover:-translate-y-0.5 hover:shadow-[0_22px_40px_rgba(13,148,136,0.45)]"
+        >
+          Get Lite <Icon.Arrow className="h-4 w-4" />
+        </Link>
       ),
       items: features.slice(0, 4),
     },
@@ -97,20 +89,12 @@ export default function PricingPage() {
       badge: "Most popular",
       caption: "$100 per 1,000 calls",
       cta: (
-        <>
-          <Link
-            href="/topup"
-            className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-emerald-500 via-teal-500 to-sky-500 px-4 py-2 text-sm font-semibold text-white shadow-[0_18px_36px_rgba(13,148,136,0.4)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_48px_rgba(13,148,136,0.5)]"
-          >
-            Get Premium <Icon.Arrow className="h-4 w-4" />
-          </Link>
-          <Link
-            href="/auth"
-            className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-emerald-400/20 to-teal-400/20 px-4 py-2 text-sm font-semibold text-emerald-700 ring-1 ring-emerald-500/30 transition hover:-translate-y-0.5 hover:from-emerald-400/30 hover:to-teal-400/30 dark:text-emerald-300 dark:ring-emerald-400/30"
-          >
-            Sign in
-          </Link>
-        </>
+        <Link
+          href="/topup"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-emerald-500 via-teal-500 to-sky-500 px-4 py-2 text-sm font-semibold text-white shadow-[0_18px_36px_rgba(13,148,136,0.4)] transition hover:-translate-y-0.5 hover:shadow-[0_24px_48px_rgba(13,148,136,0.5)]"
+        >
+          Get Premium <Icon.Arrow className="h-4 w-4" />
+        </Link>
       ),
       items: [...features, "Priority support", "Custom caller ID pools"],
     },
@@ -120,20 +104,12 @@ export default function PricingPage() {
       unit: yearly ? "/year" : "/month",
       caption: "$80 per 1,000 calls",
       cta: (
-        <>
-          <Link
-            href="/topup"
-            className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 px-4 py-2 text-sm font-semibold text-white shadow-[0_16px_32px_rgba(13,148,136,0.35)] transition hover:-translate-y-0.5 hover:shadow-[0_22px_40px_rgba(13,148,136,0.45)]"
-          >
-            Get Enterprise <Icon.Arrow className="h-4 w-4" />
-          </Link>
-          <a
-            href="mailto:studio@foe.dev"
-            className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-emerald-400/20 to-teal-400/20 px-4 py-2 text-sm font-semibold text-emerald-700 ring-1 ring-emerald-500/30 transition hover:-translate-y-0.5 hover:from-emerald-400/30 hover:to-teal-400/30 dark:text-emerald-300 dark:ring-emerald-400/30"
-          >
-            Email us
-          </a>
-        </>
+        <Link
+          href="/topup"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-gradient-to-r from-emerald-500 to-teal-500 px-4 py-2 text-sm font-semibold text-white shadow-[0_16px_32px_rgba(13,148,136,0.35)] transition hover:-translate-y-0.5 hover:shadow-[0_22px_40px_rgba(13,148,136,0.45)]"
+        >
+          Get Enterprise <Icon.Arrow className="h-4 w-4" />
+        </Link>
       ),
       items: [...features, "Dedicated success engineer", "Multi-region delivery", "Custom billing", "Multi-account support"],
     },
@@ -204,7 +180,7 @@ export default function PricingPage() {
 
 function Tier({ title, price, unit, items, highlight, badge, caption, cta }: TierConfig) {
   return (
-    <MotionCard tone={highlight ? "emerald" : "neutral"} className="flex h-full flex-col gap-4 p-6">
+    <MotionCard tone={highlight ? "emerald" : "neutral"} className="flex h-full flex-col p-6">
       <div className="flex items-center justify-between">
         <div>
           <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">{title}</div>
@@ -216,19 +192,19 @@ function Tier({ title, price, unit, items, highlight, badge, caption, cta }: Tie
           </span>
         ) : null}
       </div>
-      <div className="text-3xl font-semibold text-zinc-900 dark:text-white">{price}</div>
-      {caption ? <div className="text-xs text-zinc-500 dark:text-zinc-300">{caption}</div> : null}
-      <ul className="space-y-2 text-sm text-zinc-600 dark:text-zinc-300">
+      <div className="mt-4 text-3xl font-semibold text-zinc-900 dark:text-white">{price}</div>
+      {caption ? <div className="mt-1 text-xs text-zinc-500 dark:text-zinc-300">{caption}</div> : null}
+      <ul className="mt-4 flex-1 space-y-2 text-sm text-zinc-600 dark:text-zinc-300">
         {items.map((item) => (
           <li key={item} className="flex items-start gap-2">
-            <span className="mt-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-500">
+            <span className="mt-0.5 inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-500">
               <Icon.Check className="h-3 w-3" />
             </span>
             <span>{item}</span>
           </li>
         ))}
       </ul>
-      <div className="mt-auto space-y-2">{cta}</div>
+      <div className="mt-4">{cta}</div>
     </MotionCard>
   );
 }

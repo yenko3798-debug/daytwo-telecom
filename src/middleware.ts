@@ -6,7 +6,7 @@ const PROTECTED = ["/start", "/campaigns", "/flows", "/topup", "/dashboard"];
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  const hasSession = !!req.cookies.get("daytwo_session")?.value;
+  const hasSession = !!req.cookies.get("aura_session")?.value;
 
   // Allow Next internals & auth API
   if (

@@ -29,15 +29,15 @@ function BrandMark() {
       href="/"
       className="group relative flex items-center gap-3 rounded-full pr-3"
     >
-      <span className="grid h-11 w-11 place-items-center rounded-[1.25rem] bg-gradient-to-br from-emerald-400 via-emerald-500 to-sky-500 text-lg font-semibold text-white shadow-[0_20px_36px_rgba(16,185,129,0.4)] transition duration-300 group-hover:-translate-y-0.5 group-hover:shadow-[0_26px_48px_rgba(16,185,129,0.5)]">
-        Y
+      <span className="grid h-11 w-11 place-items-center rounded-[1.25rem] overflow-hidden bg-gradient-to-br from-emerald-400 via-emerald-500 to-sky-500 shadow-[0_20px_36px_rgba(16,185,129,0.4)] transition duration-300 group-hover:-translate-y-0.5 group-hover:shadow-[0_26px_48px_rgba(16,185,129,0.5)]">
+        <img src="/images/aura.png" alt="AURA" className="h-full w-full object-cover" />
       </span>
       <span className="flex flex-col">
         <span className="text-xs font-semibold uppercase tracking-[0.32em] text-zinc-500 dark:text-zinc-400">
-          Yenko
+          AURA
         </span>
         <span className="text-base font-semibold text-zinc-900 dark:text-white">
-          Foe Telecom
+          Telecom
         </span>
       </span>
     </Link>

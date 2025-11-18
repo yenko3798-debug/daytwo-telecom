@@ -1,7 +1,7 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 
-export const SESSION_COOKIE = "daytwo_session";
+export const SESSION_COOKIE = "aura_session";
 const secret = new TextEncoder().encode(process.env.JWT_SECRET!);
 
 const COOKIE_OPTIONS = {

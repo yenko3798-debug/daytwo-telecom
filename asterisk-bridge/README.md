@@ -52,7 +52,7 @@ enabled = yes
 pretty = yes
 allowed_origins = *
 
-[spotlight]
+[aura]
 type = user
 read_only = no
 password = replace-with-ari-password
@@ -78,7 +78,7 @@ Add an outbound Stasis handler in `extensions.conf`:
 ```
 [outbound]
 exten => _X.,1,NoOp(Outbound via Campaign)
- same => n,Stasis(spotlight,${ARG1},${ARG2},${ARG3},${ARG4},${ARG5})
+ same => n,Stasis(aura,${ARG1},${ARG2},${ARG3},${ARG4},${ARG5})
  same => n,Hangup()
 ```
 
@@ -91,8 +91,8 @@ sudo systemctl restart asterisk
 
 Create a dedicated sounds directory that the bridge will manage:
 ```bash
-sudo mkdir -p /var/lib/asterisk/sounds/spotlight/cache
-sudo chown -R asterisk:asterisk /var/lib/asterisk/sounds/spotlight
+sudo mkdir -p /var/lib/asterisk/sounds/aura/cache
+sudo chown -R asterisk:asterisk /var/lib/asterisk/sounds/aura
 ```
 
 Ensure Asterisk has write access because the bridge stores cached audio prompts and synthesized TTS files inside `cache/`.
@@ -121,10 +121,10 @@ Ensure Asterisk has write access because the bridge stores cached audio prompts 
    - `PANEL_WEBHOOK_URL`: usually `${PANEL_BASE_URL}/api/webhooks/ari`.
    - `ARI_BASE_URL`: `http://127.0.0.1:8088`.
    - `ARI_USERNAME` / `ARI_PASSWORD`: credentials from `ari.conf`.
-   - `ARI_APPLICATION`: `spotlight`.
+   - `ARI_APPLICATION`: `aura`.
    - `ASTERISK_PJSIP_DIR`: `/etc/asterisk/pjsip.d`.
-   - `ASTERISK_SOUNDS_DIR`: `/var/lib/asterisk/sounds/spotlight`.
-   - `SOUNDS_CACHE_DIR`: `/var/lib/asterisk/sounds/spotlight/cache`.
+   - `ASTERISK_SOUNDS_DIR`: `/var/lib/asterisk/sounds/aura`.
+   - `SOUNDS_CACHE_DIR`: `/var/lib/asterisk/sounds/aura/cache`.
    - `ASTERISK_TRANSPORT`: transport section name defined in `pjsip.conf` (commonly `transport-udp`).
    - `ASTERISK_CONTEXT`: dialplan context that runs `Stasis`, e.g. `outbound`.
    - `ASTERISK_CODECS`: comma-separated list supported by your carrier, such as `ulaw,alaw`.
@@ -141,7 +141,7 @@ Ensure Asterisk has write access because the bridge stores cached audio prompts 
 Create a systemd unit at `/etc/systemd/system/asterisk-bridge.service`:
 ```
 [Unit]
-Description=Spotlight Asterisk Bridge
+Description=AURA Asterisk Bridge
 After=network.target asterisk.service
 
 [Service]
@@ -195,9 +195,9 @@ The Asterisk bridge and the panel now work together without any HTTPS requiremen
 3. Check the live status from the Asterisk CLI: `sudo asterisk -rx "http show status"`. It should report `Enabled` and `Server Enabled and Bound to 0.0.0.0:8088`.
 4. Verify credentials defined in `/etc/asterisk/ari.conf` (user and password) match the `.env` values. Keep the application mapping in `stasis.conf` rather than `ari.conf`.
 5. Test locally on the PBX first:  
-    `curl -u spotlight:your-password http://127.0.0.1:8088/ari/asterisk/ping`  
+    `curl -u aura:your-password http://127.0.0.1:8088/ari/asterisk/ping`  
    If this fails, re-check steps 2–4. If it works locally, test from the remote host running the bridge:  
-    `curl -u spotlight:your-password http://107.174.63.45:8088/ari/asterisk/ping`.
+    `curl -u aura:your-password http://107.174.63.45:8088/ari/asterisk/ping`.
 6. If remote access fails but localhost succeeds, open the firewall: `sudo ufw allow 8088/tcp` (or update security groups/NAT rules). Some providers block uncommon ports until explicitly allowed.
 7. When the port is still closed, run `sudo ss -ltnp | grep 8088` on the PBX to confirm Asterisk is listening and no other service occupies the port. Pair this with packet captures (`sudo tcpdump -nn -i eth0 port 8088`) if you need to prove the traffic never arrives.
 8. `radcli: rc_read_config` warnings during `systemctl status asterisk` are harmless and unrelated to ARI; they can be ignored unless you need Radius accounting.
@@ -214,10 +214,10 @@ The Asterisk bridge and the panel now work together without any HTTPS requiremen
 4. Define your ARI applications in `/etc/asterisk/stasis.conf` instead of `ari.conf`. Example:
    ```
    [applications]
-   spotlight=spotlight-handler
+   aura=aura-handler
    ```
-   Replace `spotlight-handler` with your actual handler module or dialplan entry, then reload with `sudo asterisk -rx "core reload"`.
-5. Retest locally: `curl -u spotlight:password http://127.0.0.1:8088/ari/asterisk/ping`. Once it returns `{"ping":"pong"}`, retry from the bridge host.
+   Replace `aura-handler` with your actual handler module or dialplan entry, then reload with `sudo asterisk -rx "core reload"`.
+5. Retest locally: `curl -u aura:password http://127.0.0.1:8088/ari/asterisk/ping`. Once it returns `{"ping":"pong"}`, retry from the bridge host.
 
 ### Bridge fails with `ERR_MODULE_NOT_FOUND: .../dist/server`
 
