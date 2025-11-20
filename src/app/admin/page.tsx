@@ -174,7 +174,7 @@ export default function AdminPage() {
   const [creatingUser, setCreatingUser] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const { push, View: Toasts } = useToast();
-  usePageLoading(520);
+  usePageLoading(160);
 
   const [routeForm, setRouteForm] = useState({
     name: "",

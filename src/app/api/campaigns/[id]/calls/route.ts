@@ -74,46 +74,51 @@ export async function GET(
           skip: 1,
         }
       : {}),
-    include: {
-      lead: {
-        select: {
-          phoneNumber: true,
-          normalizedNumber: true,
-          metadata: true,
+      include: {
+        lead: {
+          select: {
+            phoneNumber: true,
+            normalizedNumber: true,
+            metadata: true,
+            voicemailStatus: true,
+            voicemailRetries: true,
+          },
+        },
+        campaign: {
+          select: {
+            id: true,
+            name: true,
+          },
         },
       },
-      campaign: {
-        select: {
-          id: true,
-          name: true,
-        },
-      },
-    },
   });
 
   const hasMore = calls.length > limit;
   const items = hasMore ? calls.slice(0, -1) : calls;
 
   return NextResponse.json({
-    calls: items.map((call) => ({
-      id: call.id,
-      status: call.status.toLowerCase(),
-      callerId: call.callerId,
-      dialedNumber: call.dialedNumber,
-      durationSeconds: call.durationSeconds,
-      costCents: call.costCents,
-      dtmf: call.dtmf,
-      createdAt: call.createdAt,
-      metadata: call.metadata,
-      campaign: call.campaign,
-      lead: call.lead
-        ? {
-            phoneNumber: call.lead.phoneNumber,
-            normalizedNumber: call.lead.normalizedNumber,
-            rawLine: rawLineFromMetadata(call.lead.metadata),
-          }
-        : null,
-    })),
+      calls: items.map((call) => ({
+        id: call.id,
+        status: call.status.toLowerCase(),
+        callerId: call.callerId,
+        dialedNumber: call.dialedNumber,
+        durationSeconds: call.durationSeconds,
+        costCents: call.costCents,
+        dtmf: call.dtmf,
+        createdAt: call.createdAt,
+        metadata: call.metadata,
+        voicemailStatus: call.voicemailStatus.toLowerCase(),
+        campaign: call.campaign,
+        lead: call.lead
+          ? {
+              phoneNumber: call.lead.phoneNumber,
+              normalizedNumber: call.lead.normalizedNumber,
+              rawLine: rawLineFromMetadata(call.lead.metadata),
+              voicemailStatus: call.lead.voicemailStatus.toLowerCase(),
+              voicemailRetries: call.lead.voicemailRetries,
+            }
+          : null,
+      })),
     nextCursor: hasMore ? items[items.length - 1]?.id : null,
   });
 }

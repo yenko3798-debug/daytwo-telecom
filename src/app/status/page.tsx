@@ -36,7 +36,7 @@ function cn(...a){ return a.filter(Boolean).join(" "); }
 export default function GlobalStatus(){
   const [range, setRange] = useState("24h"); // 24h | 7d | 30d
   const [dtmfOnly, setDtmfOnly] = useState(false);
-  const { loading: introLoading } = usePageLoading(700);
+  const { loading: introLoading } = usePageLoading(160);
   const rangeHours = range === "7d" ? 24 * 7 : range === "30d" ? 24 * 30 : 24;
   const { data: metrics, loading: metricsLoading } = useLiveMetrics({ scope: "public", rangeHours, intervalMs: 8000 });
   const loading = introLoading || metricsLoading;

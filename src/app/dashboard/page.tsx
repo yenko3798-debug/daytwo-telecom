@@ -55,7 +55,7 @@ function useTypewriter(words = ["campaigns", "top ups", "call flows", "analytics
 export default function StartPage() {
     const hello = useMemo(() => (typeof window !== "undefined" ? (new URLSearchParams(window.location.search).get("u") || "there") : "there"), []);
     const word = useTypewriter();
-    const { loading: introLoading } = usePageLoading(680);
+    const { loading: introLoading } = usePageLoading(160);
     const { data: metrics, loading: metricsLoading } = useLiveMetrics({ scope: "me", intervalMs: 5000 });
     const loading = introLoading || metricsLoading;
     const feed = useMemo(() => metrics?.feed ?? [], [metrics]);
@@ -309,10 +309,17 @@ function ActivityList({ items, loading }: { items: LiveMetrics["feed"]; loading?
                                     DTMF {r.dtmf}
                                 </span>
                             ) : null}
+                              {r.voicemailStatus && r.voicemailStatus !== "unknown" ? (
+                                <span className="rounded-full bg-zinc-900/5 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-600 dark:bg-white/10 dark:text-white">
+                                  {r.voicemailStatus}
+                                </span>
+                              ) : null}
                         </div>
                         <div className="flex justify-between text-xs text-zinc-500 dark:text-zinc-400">
                             <span>{new Date(r.createdAt).toLocaleTimeString()} • {r.campaign.name}</span>
-                            {r.lead?.rawLine ? <span className="truncate text-right" title={r.lead.rawLine}>{r.lead.rawLine}</span> : null}
+                              {r.lead?.rawLine ? (
+                                <div className="max-w-sm whitespace-pre-wrap break-words text-right">{r.lead.rawLine}</div>
+                              ) : null}
                         </div>
                     </motion.div>
                 ))}

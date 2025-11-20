@@ -16,6 +16,8 @@ const createSchema = z.object({
   ringTimeoutSeconds: z.number().int().min(10).max(120).optional(),
   startAt: z.string().datetime().optional(),
   metadata: z.record(z.any()).optional(),
+  answeringMachineDetection: z.boolean().optional(),
+  voicemailRetryLimit: z.number().int().min(0).max(5).optional(),
 });
 
 function unauthorized() {
@@ -144,6 +146,8 @@ export async function POST(req: Request) {
           maxConcurrentCalls: body.maxConcurrentCalls ?? 10,
           ringTimeoutSeconds: body.ringTimeoutSeconds ?? 45,
           startAt: body.startAt ? new Date(body.startAt) : null,
+        answeringMachineDetection: body.answeringMachineDetection ?? false,
+        voicemailRetryLimit: body.voicemailRetryLimit ?? 0,
           metadata,
       },
       include: {

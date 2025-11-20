@@ -286,7 +286,7 @@ export default function FlowBuilderPage() {
   const [draft, setDraft] = useState<FlowDraft | null>(null);
   const [loading, setLoading] = useState(true);
   const { push, View: Toasts } = useToast();
-  usePageLoading(640);
+  usePageLoading(160);
 
   const loadFlows = useCallback(async () => {
     try {

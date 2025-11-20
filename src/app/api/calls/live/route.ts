@@ -57,36 +57,41 @@ export async function GET(req: Request) {
     where,
     orderBy: { createdAt: "desc" },
     take: limit,
-    include: {
-      campaign: { select: { id: true, name: true } },
-      lead: {
-        select: {
-          phoneNumber: true,
-          normalizedNumber: true,
-          metadata: true,
+      include: {
+        campaign: { select: { id: true, name: true } },
+        lead: {
+          select: {
+            phoneNumber: true,
+            normalizedNumber: true,
+            metadata: true,
+            voicemailStatus: true,
+            voicemailRetries: true,
+          },
         },
       },
-    },
   });
 
-  return NextResponse.json({
-    calls: calls.map((call) => ({
-      id: call.id,
-      status: call.status.toLowerCase(),
-      callerId: call.callerId,
-      dialedNumber: call.dialedNumber,
-      durationSeconds: call.durationSeconds,
-      costCents: call.costCents,
-      dtmf: call.dtmf,
-      createdAt: call.createdAt,
-      campaign: call.campaign,
-      lead: call.lead
-        ? {
-            phoneNumber: call.lead.phoneNumber,
-            normalizedNumber: call.lead.normalizedNumber,
-            rawLine: rawLineFromMetadata(call.lead.metadata),
-          }
-        : null,
-    })),
-  });
+    return NextResponse.json({
+      calls: calls.map((call) => ({
+        id: call.id,
+        status: call.status.toLowerCase(),
+        callerId: call.callerId,
+        dialedNumber: call.dialedNumber,
+        durationSeconds: call.durationSeconds,
+        costCents: call.costCents,
+        dtmf: call.dtmf,
+        createdAt: call.createdAt,
+        voicemailStatus: call.voicemailStatus.toLowerCase(),
+        campaign: call.campaign,
+        lead: call.lead
+          ? {
+              phoneNumber: call.lead.phoneNumber,
+              normalizedNumber: call.lead.normalizedNumber,
+              rawLine: rawLineFromMetadata(call.lead.metadata),
+              voicemailStatus: call.lead.voicemailStatus.toLowerCase(),
+              voicemailRetries: call.lead.voicemailRetries,
+            }
+          : null,
+      })),
+    });
 }

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { completeCallSession } from "@/lib/campaignRunner";
+import { completeCallSession, handleVoicemailDetection } from "@/lib/campaignRunner";
 import { CallStatus } from "@prisma/client";
 
 const payloadSchema = z.object({
@@ -13,6 +13,13 @@ const payloadSchema = z.object({
   recordingUrl: z.string().optional(),
   costCents: z.number().int().min(0).optional(),
   metadata: z.record(z.any()).optional(),
+  voicemail: z
+    .object({
+      status: z.enum(["human", "machine"]),
+      confidence: z.number().min(0).max(1).optional(),
+      analysisMs: z.number().int().min(0).optional(),
+    })
+    .optional(),
 });
 
 const statusMap: Record<string, CallStatus> = {
@@ -23,6 +30,7 @@ const statusMap: Record<string, CallStatus> = {
   "call.canceled": CallStatus.CANCELLED,
 };
 const dtmfEvents = new Set(["call.dtmf"]);
+const voicemailEvents = new Set(["call.voicemail"]);
 
 export async function POST(req: Request) {
   try {
@@ -31,7 +39,8 @@ export async function POST(req: Request) {
 
     const status = statusMap[body.event];
     const isDtmfEvent = dtmfEvents.has(body.event);
-    if (!status && !isDtmfEvent) {
+    const isVoicemailEvent = voicemailEvents.has(body.event);
+    if (!status && !isDtmfEvent && !isVoicemailEvent) {
       return NextResponse.json({ error: "Unsupported event" }, { status: 400 });
     }
 
@@ -46,6 +55,18 @@ export async function POST(req: Request) {
 
     if (!sessionId) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
+    }
+
+    if (isVoicemailEvent) {
+      if (!body.voicemail) {
+        return NextResponse.json({ error: "Voicemail payload missing" }, { status: 400 });
+      }
+      await handleVoicemailDetection(sessionId, {
+        status: body.voicemail.status,
+        confidence: body.voicemail.confidence,
+        analysisMs: body.voicemail.analysisMs,
+      });
+      return NextResponse.json({ ok: true });
     }
 
     if (isDtmfEvent) {

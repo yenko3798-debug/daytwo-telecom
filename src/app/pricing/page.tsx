@@ -61,7 +61,7 @@ type TierConfig = {
 
 export default function PricingPage() {
   const [yearly, setYearly] = useState(false);
-  const { loading } = usePageLoading(600);
+  const { loading } = usePageLoading(160);
 
   const caption = yearly ? "Save 2 months with yearly billing" : "Billed monthly";
 
