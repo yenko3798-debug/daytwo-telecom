@@ -15,7 +15,7 @@ const createSchema = z.object({
   callerIdFormat: z.string().max(64).optional().nullable(),
   maxChannels: z.number().int().min(1).max(1000).optional(),
   concurrencyLimit: z.number().int().min(1).max(500).optional().nullable(),
-  costPerMinuteCents: z.number().int().min(0).max(100000).optional().nullable(),
+    costPerMinuteCents: z.number().int().min(0).max(100000).optional().nullable(),
   isPublic: z.boolean().optional(),
   metadata: z.record(z.any()).optional(),
 });
@@ -62,7 +62,7 @@ export async function POST(req: Request) {
         callerIdFormat: body.callerIdFormat ?? null,
         maxChannels: body.maxChannels ?? 50,
         concurrencyLimit: body.concurrencyLimit ?? null,
-        costPerMinuteCents: body.costPerMinuteCents ?? null,
+          costPerMinuteCents: body.costPerMinuteCents ?? 0,
         isPublic: body.isPublic ?? true,
         metadata: body.metadata ?? null,
         createdById: session.sub,
