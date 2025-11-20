@@ -1,3 +1,12 @@
+-- Enum definitions
+CREATE TYPE "UserRole" AS ENUM ('user', 'admin', 'superadmin');
+CREATE TYPE "RouteStatus" AS ENUM ('active', 'inactive', 'maintenance');
+CREATE TYPE "CampaignStatus" AS ENUM ('draft', 'scheduled', 'running', 'paused', 'completed', 'stopped', 'failed');
+CREATE TYPE "LeadStatus" AS ENUM ('pending', 'queued', 'dialing', 'connected', 'completed', 'failed', 'skipped', 'paused');
+CREATE TYPE "CallStatus" AS ENUM ('created', 'placing', 'ringing', 'answered', 'completed', 'failed', 'hungup', 'cancelled');
+CREATE TYPE "AdjustmentType" AS ENUM ('credit', 'debit');
+CREATE TYPE "AdjustmentSource" AS ENUM ('admin_adjustment', 'top_up', 'campaign_charge', 'refund');
+
 -- CreateTable: User
 CREATE TABLE "User" (
     "id" TEXT NOT NULL,
@@ -5,7 +14,7 @@ CREATE TABLE "User" (
     "name" TEXT NOT NULL,
     "passwordHash" TEXT NOT NULL,
     "balanceCents" INTEGER NOT NULL DEFAULT 0,
-    "role" TEXT NOT NULL DEFAULT 'user',
+    "role" "UserRole" NOT NULL DEFAULT 'user',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     CONSTRAINT "User_pkey" PRIMARY KEY ("id")
@@ -26,7 +35,7 @@ CREATE TABLE "SipRoute" (
     "maxChannels" INTEGER NOT NULL DEFAULT 50,
     "concurrencyLimit" INTEGER,
     "costPerMinuteCents" INTEGER NOT NULL DEFAULT 0,
-    "status" TEXT NOT NULL DEFAULT 'active',
+    "status" "RouteStatus" NOT NULL DEFAULT 'active',
     "isPublic" BOOLEAN NOT NULL DEFAULT true,
     "metadata" JSONB,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -58,7 +67,7 @@ CREATE TABLE "Campaign" (
     "routeId" TEXT NOT NULL,
     "name" TEXT NOT NULL,
     "description" TEXT,
-    "status" TEXT NOT NULL DEFAULT 'draft',
+    "status" "CampaignStatus" NOT NULL DEFAULT 'draft',
     "callerId" TEXT NOT NULL,
     "callsPerMinute" INTEGER NOT NULL DEFAULT 60,
     "maxConcurrentCalls" INTEGER NOT NULL DEFAULT 10,
@@ -86,7 +95,7 @@ CREATE TABLE "CampaignLead" (
     "campaignId" TEXT NOT NULL,
     "phoneNumber" TEXT NOT NULL,
     "normalizedNumber" TEXT NOT NULL,
-    "status" TEXT NOT NULL DEFAULT 'pending',
+    "status" "LeadStatus" NOT NULL DEFAULT 'pending',
     "dtmf" TEXT,
     "attempts" INTEGER NOT NULL DEFAULT 0,
     "lastDialedAt" TIMESTAMP(3),
@@ -108,7 +117,7 @@ CREATE TABLE "CallSession" (
     "routeId" TEXT NOT NULL,
     "ariChannelId" TEXT,
     "externalId" TEXT,
-    "status" TEXT NOT NULL DEFAULT 'created',
+    "status" "CallStatus" NOT NULL DEFAULT 'created',
     "callerId" TEXT NOT NULL,
     "dialedNumber" TEXT NOT NULL,
     "requestedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -137,8 +146,8 @@ CREATE TABLE "BalanceAdjustment" (
     "userId" TEXT NOT NULL,
     "createdById" TEXT,
     "amountCents" INTEGER NOT NULL,
-    "type" TEXT NOT NULL,
-    "source" TEXT NOT NULL,
+    "type" "AdjustmentType" NOT NULL,
+    "source" "AdjustmentSource" NOT NULL,
     "reason" TEXT,
     "referenceId" TEXT,
     "metadata" JSONB,
