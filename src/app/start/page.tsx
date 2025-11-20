@@ -191,9 +191,12 @@ export default function StartCampaignPage() {
     const [uploading, setUploading] = useState(false);
     const [starting, setStarting] = useState(false);
     const [leadUploadResult, setLeadUploadResult] = useState<number>(0);
+    const [skippedLines, setSkippedLines] = useState<number>(0);
     const [dtmfFeed, setDtmfFeed] = useState<any[]>([]);
     const [dtmfFilter, setDtmfFilter] = useState<string | null>(null);
     const [dtmfLoading, setDtmfLoading] = useState(false);
+    const [amdEnabled, setAmdEnabled] = useState(false);
+    const [voicemailRetryLimit, setVoicemailRetryLimit] = useState(0);
 
   const loadOptions = useCallback(async () => {
     try {
@@ -327,6 +330,8 @@ export default function StartCampaignPage() {
         callsPerMinute,
         maxConcurrentCalls,
         ringTimeoutSeconds: ringTimeout,
+          amdEnabled,
+          voicemailRetryLimit: Math.max(0, Number.isFinite(voicemailRetryLimit) ? voicemailRetryLimit : 0),
       };
       const res = await fetch("/api/campaigns", {
         method: "POST",
@@ -367,6 +372,8 @@ export default function StartCampaignPage() {
     callsPerMinute,
     maxConcurrentCalls,
     ringTimeout,
+      amdEnabled,
+      voicemailRetryLimit,
     push,
   ]);
 
@@ -394,9 +401,13 @@ export default function StartCampaignPage() {
         const data = await res.json().catch(() => null);
         throw new Error(data?.error ?? "Unable to upload leads");
       }
-      const data = await res.json();
-      setLeadUploadResult(data.inserted ?? 0);
-      push(`Uploaded ${data.inserted ?? 0} leads`, "success");
+        const data = await res.json();
+        const inserted = data.inserted ?? 0;
+        const skipped = data.skipped ?? 0;
+        setLeadUploadResult(inserted);
+        setSkippedLines(skipped);
+        const suffix = skipped > 0 ? ` · skipped ${skipped} pressed-1 lines` : "";
+        push(`Uploaded ${inserted} leads${suffix}`, "success");
     } catch (error: any) {
       push(error?.message ?? "Unable to upload leads", "error");
     } finally {
@@ -431,8 +442,11 @@ export default function StartCampaignPage() {
   const resetState = useCallback(() => {
     setCampaign(null);
     setLeadUploadResult(0);
+      setSkippedLines(0);
     setLeads([]);
     setRawLeadText("");
+      setAmdEnabled(false);
+      setVoicemailRetryLimit(0);
     push("Ready to create another campaign", "info");
   }, [push]);
 
@@ -564,6 +578,32 @@ export default function StartCampaignPage() {
               </div>
             </div>
 
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="flex items-center gap-3 rounded-2xl border border-white/60 bg-white/70 px-4 py-3 text-sm text-zinc-700 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200">
+                  <input
+                    type="checkbox"
+                    checked={amdEnabled}
+                    onChange={(event) => setAmdEnabled(event.target.checked)}
+                    className="h-4 w-4 accent-emerald-500"
+                  />
+                  Enable answering machine detection
+                </label>
+                <div>
+                  <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                    Voicemail retry count
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={5}
+                    value={voicemailRetryLimit}
+                    disabled={!amdEnabled}
+                    onChange={(event) => setVoicemailRetryLimit(Number(event.target.value))}
+                    className="mt-1 w-full rounded-xl border border-white/60 bg-white/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-white"
+                  />
+                </div>
+              </div>
+
             <div className="rounded-2xl border border-white/60 bg-white/60 p-4 dark:border-white/10 dark:bg-white/5">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
@@ -669,6 +709,10 @@ export default function StartCampaignPage() {
                   <span>Leads uploaded</span>
                   <span>{leadUploadResult}</span>
                 </div>
+                  <div className="flex items-center justify-between">
+                    <span>Pressed 1 skipped</span>
+                    <span>{skippedLines}</span>
+                  </div>
                 <div className="flex items-center justify-between">
                   <span>Total cost (est.)</span>
                   <span>${(leadUploadResult * RATE_PER_LEAD).toFixed(2)}</span>
@@ -715,12 +759,11 @@ export default function StartCampaignPage() {
                           <div className="text-xs text-zinc-500 dark:text-zinc-400">
                             {new Date(entry.createdAt).toLocaleTimeString()}
                           </div>
-                          {entry.lead?.rawLine ? (
-                            <details className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">
-                              <summary className="cursor-pointer text-emerald-500">View input line</summary>
-                              <p className="mt-1 break-words">{entry.lead.rawLine}</p>
-                            </details>
-                          ) : null}
+                            {entry.lead?.rawLine ? (
+                              <p className="mt-2 whitespace-pre-wrap break-words text-xs text-zinc-600 dark:text-zinc-300">
+                                {entry.lead.rawLine}
+                              </p>
+                            ) : null}
                         </div>
                       ))}
                     </div>

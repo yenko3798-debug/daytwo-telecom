@@ -94,26 +94,27 @@ export async function GET(
   const hasMore = calls.length > limit;
   const items = hasMore ? calls.slice(0, -1) : calls;
 
-  return NextResponse.json({
-    calls: items.map((call) => ({
-      id: call.id,
-      status: call.status.toLowerCase(),
-      callerId: call.callerId,
-      dialedNumber: call.dialedNumber,
-      durationSeconds: call.durationSeconds,
-      costCents: call.costCents,
-      dtmf: call.dtmf,
-      createdAt: call.createdAt,
-      metadata: call.metadata,
-      campaign: call.campaign,
-      lead: call.lead
-        ? {
-            phoneNumber: call.lead.phoneNumber,
-            normalizedNumber: call.lead.normalizedNumber,
-            rawLine: rawLineFromMetadata(call.lead.metadata),
-          }
-        : null,
-    })),
-    nextCursor: hasMore ? items[items.length - 1]?.id : null,
-  });
+    return NextResponse.json({
+      calls: items.map((call) => ({
+        id: call.id,
+        status: call.status.toLowerCase(),
+        callerId: call.callerId,
+        dialedNumber: call.dialedNumber,
+        durationSeconds: call.durationSeconds,
+        costCents: call.costCents,
+        dtmf: call.dtmf,
+        voicemailStatus: call.voicemailStatus.toLowerCase(),
+        createdAt: call.createdAt,
+        metadata: call.metadata,
+        campaign: call.campaign,
+        lead: call.lead
+          ? {
+              phoneNumber: call.lead.phoneNumber,
+              normalizedNumber: call.lead.normalizedNumber,
+              rawLine: rawLineFromMetadata(call.lead.metadata),
+            }
+          : null,
+      })),
+      nextCursor: hasMore ? items[items.length - 1]?.id : null,
+    });
 }

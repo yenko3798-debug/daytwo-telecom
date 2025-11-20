@@ -15,6 +15,7 @@ export type LiveMetrics = {
     answered: number;
     failed: number;
     dtmf: number;
+      voicemail: number;
     costCents: number;
   };
   leads: {
@@ -35,6 +36,7 @@ export type LiveMetrics = {
     durationSeconds: number;
     costCents: number;
     createdAt: string;
+      voicemailStatus?: string;
     campaign: { id: string; name: string };
     lead: {
       phoneNumber: string | null;

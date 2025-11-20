@@ -140,6 +140,20 @@ type SessionState = {
   variables: Record<string, string>;
   completed: boolean;
   completionSent: boolean;
+  voicemail?: {
+    config: {
+      enabled: boolean;
+      retryLimit: number;
+      attempt: number;
+    };
+    status: "unknown" | "human" | "machine";
+    decided: boolean;
+    speechStart?: number;
+    firstSpeechMs?: number;
+    firstSilenceMs?: number;
+    detectionTimer?: NodeJS.Timeout;
+  };
+  answeredAt?: number;
 };
 
 let client: any;
@@ -342,6 +356,109 @@ async function notifyPanel(event: string, body: Record<string, any>) {
   }
 }
 
+function extractVoicemailConfig(source?: Record<string, any> | null) {
+  if (!source || typeof source !== "object" || Array.isArray(source)) return null;
+  const raw = (source as Record<string, any>).voicemail;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  if (!raw.enabled) return null;
+  const retryLimit = Number.isFinite(raw.retryLimit) ? Math.max(0, Number(raw.retryLimit)) : 0;
+  const attempt = Number.isFinite(raw.attempt) ? Math.max(0, Number(raw.attempt)) : 0;
+  return {
+    enabled: true,
+    retryLimit,
+    attempt,
+  };
+}
+
+function clearVoicemailTimer(state: SessionState) {
+  if (state.voicemail?.detectionTimer) {
+    clearTimeout(state.voicemail.detectionTimer);
+    state.voicemail.detectionTimer = undefined;
+  }
+}
+
+function armVoicemailTimer(state: SessionState) {
+  if (!state.voicemail || state.voicemail.decided) return;
+  clearVoicemailTimer(state);
+  const timeout = setTimeout(() => {
+    finalizeVoicemailHuman(state);
+  }, config.voicemailDetection.detectionTimeoutMs);
+  state.voicemail.detectionTimer = timeout;
+}
+
+function finalizeVoicemailHuman(state: SessionState) {
+  if (!state.voicemail || state.voicemail.decided) return;
+  clearVoicemailTimer(state);
+  state.voicemail.decided = true;
+  state.voicemail.status = "human";
+}
+
+async function triggerVoicemail(state: SessionState, metrics: { reason: string; silenceMs?: number; speechMs?: number }) {
+  if (!state.voicemail || state.voicemail.decided) return;
+  clearVoicemailTimer(state);
+  state.voicemail.decided = true;
+  state.voicemail.status = "machine";
+  const attempt = state.voicemail.config.attempt ?? 0;
+  const retryEligible = attempt < state.voicemail.config.retryLimit;
+  state.voicemail.config.attempt = attempt + 1;
+  state.completed = true;
+  state.completionSent = true;
+  try {
+    await notifyPanel("call.voicemail", {
+      sessionId: state.sessionId,
+      channelId: state.channelId,
+      metadata: {
+        detection: metrics,
+        retryEligible,
+      },
+    });
+  } catch (error: any) {
+    console.error(`Voicemail notify failed: ${error?.message ?? error}`);
+  }
+  try {
+    await new Promise<void>((resolve) => {
+      state.channel.hangup({}, () => resolve());
+    });
+  } catch {}
+}
+
+function handleTalkingEvent(event: any, started: boolean) {
+  const state = sessionsByChannel.get(event.channel.id);
+  if (!state || !state.voicemail || state.voicemail.decided) return;
+  const cfg = config.voicemailDetection;
+  const now = Date.now();
+  if (!state.answeredAt) {
+    state.answeredAt = now;
+  }
+  if (started) {
+    const silenceMs = now - (state.answeredAt ?? state.startedAt);
+    if (state.voicemail.firstSilenceMs === undefined) {
+      state.voicemail.firstSilenceMs = silenceMs;
+    }
+    if (silenceMs >= cfg.maxSilenceBeforeSpeechMs) {
+      triggerVoicemail(state, { reason: "silence", silenceMs }).catch((error) => {
+        console.error(`Voicemail trigger error: ${error?.message ?? error}`);
+      });
+      return;
+    }
+    state.voicemail.speechStart = now;
+    return;
+  }
+  if (!state.voicemail.speechStart) return;
+  const speechMs = now - state.voicemail.speechStart;
+  state.voicemail.speechStart = undefined;
+  if (state.voicemail.firstSpeechMs === undefined) {
+    state.voicemail.firstSpeechMs = speechMs;
+  }
+  if (speechMs >= cfg.machineSpeechMinMs) {
+    triggerVoicemail(state, { reason: "longGreeting", speechMs }).catch((error) => {
+      console.error(`Voicemail trigger error: ${error?.message ?? error}`);
+    });
+  } else if (speechMs <= cfg.humanSpeechMaxMs) {
+    finalizeVoicemailHuman(state);
+  }
+}
+
 async function fetchSession(sessionId: string) {
   const response = await fetch(`${config.panelBaseUrl}/api/ari/sessions/${sessionId}`, {
     headers: {
@@ -385,6 +502,14 @@ function createSessionState(payload: SessionPayload, channel: any) {
   if (!nodeMap.has(flow.entry)) {
     throw new Error(`Flow entry node ${flow.entry} missing`);
   }
+  const sessionMeta =
+    payload.session.metadata && typeof payload.session.metadata === "object" && !Array.isArray(payload.session.metadata)
+      ? (payload.session.metadata as Record<string, any>)
+      : null;
+  const campaignMeta =
+    payload.campaign.metadata && typeof payload.campaign.metadata === "object" && !Array.isArray(payload.campaign.metadata)
+      ? (payload.campaign.metadata as Record<string, any>)
+      : null;
   const state: SessionState = {
     sessionId: payload.session.id,
     channelId: channel.id,
@@ -398,6 +523,15 @@ function createSessionState(payload: SessionPayload, channel: any) {
     completed: false,
     completionSent: false,
   };
+  const voicemailConfig =
+    extractVoicemailConfig(sessionMeta) ?? extractVoicemailConfig(campaignMeta);
+  if (voicemailConfig) {
+    state.voicemail = {
+      config: voicemailConfig,
+      status: "unknown",
+      decided: false,
+    };
+  }
   return state;
 }
 
@@ -610,6 +744,10 @@ async function handleSessionStart(event: any, channel: any) {
       else resolve();
     });
   });
+    state.answeredAt = Date.now();
+    if (state.voicemail) {
+      armVoicemailTimer(state);
+    }
   await notifyPanel("call.answered", {
     sessionId: state.sessionId,
     channelId: channel.id,
@@ -651,6 +789,7 @@ async function handleStasisEnd(event: any) {
     }
     return;
   }
+    clearVoicemailTimer(state);
   sessionsByChannel.delete(event.channel.id);
   if (!state.completionSent) {
     state.completionSent = true;
@@ -697,5 +836,19 @@ export async function startFlowRunner() {
       console.error(`DTMF handler error: ${error?.message ?? error}`);
     }
   });
+    client.on("ChannelTalkingStarted", (event: any) => {
+      try {
+        handleTalkingEvent(event, true);
+      } catch (error: any) {
+        console.error(`TalkingStarted error: ${error?.message ?? error}`);
+      }
+    });
+    client.on("ChannelTalkingFinished", (event: any) => {
+      try {
+        handleTalkingEvent(event, false);
+      } catch (error: any) {
+        console.error(`TalkingFinished error: ${error?.message ?? error}`);
+      }
+    });
   client.start(config.ariApplication);
 }
