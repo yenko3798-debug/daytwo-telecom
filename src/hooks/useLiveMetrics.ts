@@ -35,11 +35,14 @@ export type LiveMetrics = {
     durationSeconds: number;
     costCents: number;
     createdAt: string;
+      voicemailStatus: string;
     campaign: { id: string; name: string };
     lead: {
       phoneNumber: string | null;
       normalizedNumber: string | null;
       rawLine: string | null;
+        voicemailStatus: string | null;
+        voicemailRetries: number;
     } | null;
   }>;
 };

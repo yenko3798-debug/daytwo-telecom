@@ -7,12 +7,14 @@ import {
   CampaignLead,
   AdjustmentType,
   AdjustmentSource,
+  VoicemailStatus,
 } from "@prisma/client";
 import { createHash } from "crypto";
 import { originateCall } from "./ari";
 import { FlowDefinitionSchema, RATE_PER_LEAD_CENTS, summarizeFlow } from "./flows";
 import { prisma } from "./prisma";
 import { normalizePhoneNumber, toDialable } from "./phone";
+import { notifyDtmfWebhooks } from "./notificationWebhooks";
 
 type RunnerState = {
   campaignId: string;
@@ -510,12 +512,108 @@ type CompletionPayload = {
   metadata?: Prisma.JsonValue;
 };
 
+type VoicemailDetectionPayload = {
+  status: "human" | "machine";
+  confidence?: number;
+  analysisMs?: number;
+};
+
+export async function handleVoicemailDetection(
+  sessionId: string,
+  payload: VoicemailDetectionPayload
+) {
+  const session = await prisma.callSession.findUnique({
+    where: { id: sessionId },
+    include: {
+      campaign: {
+        select: {
+          id: true,
+          voicemailRetryLimit: true,
+        },
+      },
+      lead: {
+        select: {
+          id: true,
+          status: true,
+          voicemailRetries: true,
+        },
+      },
+    },
+  });
+  if (!session || !session.campaign || !session.lead) return;
+  const voicemailStatus =
+    payload.status === "machine" ? VoicemailStatus.MACHINE : VoicemailStatus.HUMAN;
+  const allowRetry =
+    payload.status === "machine" &&
+    session.campaign.voicemailRetryLimit > session.lead.voicemailRetries;
+  await prisma.$transaction(async (tx) => {
+    const currentMeta =
+      session.metadata && typeof session.metadata === "object" && !Array.isArray(session.metadata)
+        ? (session.metadata as Record<string, any>)
+        : {};
+    const metadata = {
+      ...currentMeta,
+      voicemail: {
+        status: payload.status,
+        confidence: payload.confidence ?? null,
+        analysisMs: payload.analysisMs ?? null,
+        detectedAt: new Date().toISOString(),
+      },
+    };
+    await tx.callSession.update({
+      where: { id: sessionId },
+      data: {
+        voicemailStatus,
+        metadata,
+      },
+    });
+
+    const leadUpdate: Prisma.CampaignLeadUpdateInput = {
+      voicemailStatus: voicemailStatus,
+    };
+    if (payload.status === "machine") {
+      leadUpdate.voicemailRetries = { increment: 1 };
+      if (allowRetry) {
+        leadUpdate.status = LeadStatus.QUEUED;
+        leadUpdate.voicemailStatus = VoicemailStatus.RETRYING;
+      } else {
+        leadUpdate.status = LeadStatus.SKIPPED;
+        leadUpdate.voicemailStatus = VoicemailStatus.SKIPPED;
+      }
+    } else if (payload.status === "human") {
+      leadUpdate.voicemailStatus = VoicemailStatus.HUMAN;
+    }
+    await tx.campaignLead.update({
+      where: { id: session.leadId },
+      data: leadUpdate,
+    });
+  });
+}
+
 export async function completeCallSession(
   sessionId: string,
   payload: CompletionPayload
 ) {
   const session = await prisma.callSession.findUnique({
     where: { id: sessionId },
+    include: {
+      campaign: {
+        select: {
+          id: true,
+          userId: true,
+          name: true,
+        },
+      },
+      lead: {
+        select: {
+          id: true,
+          status: true,
+          metadata: true,
+          voicemailStatus: true,
+          voicemailRetries: true,
+        },
+      },
+    },
   });
   if (!session) return;
 
@@ -545,6 +643,19 @@ export async function completeCallSession(
   if (hasDigits) {
     updates.dtmf = payload.dtmf;
   }
+  const leadMeta =
+    session.lead &&
+    session.lead.metadata &&
+    typeof session.lead.metadata === "object" &&
+    !Array.isArray(session.lead.metadata)
+      ? (session.lead.metadata as Record<string, any>)
+      : undefined;
+  const leadRawLine =
+    typeof leadMeta?.rawLine === "string" && leadMeta.rawLine.length > 0 ? leadMeta.rawLine : null;
+  const leadStatusLocked =
+    session.lead &&
+    session.lead.status === LeadStatus.QUEUED &&
+    session.lead.voicemailStatus === VoicemailStatus.RETRYING;
 
   await prisma.$transaction(async (tx) => {
     await tx.callSession.update({
@@ -553,7 +664,7 @@ export async function completeCallSession(
     });
 
     const leadUpdate: Prisma.CampaignLeadUpdateInput = {};
-    if (payload.status) {
+    if (payload.status && !leadStatusLocked) {
       if (
         payload.status === CallStatus.ANSWERED ||
         payload.status === CallStatus.COMPLETED ||
@@ -613,4 +724,18 @@ export async function completeCallSession(
     releaseSession(state, session.id);
   }
   await finalizeIfDone(session.campaignId);
+
+  if (hasDigits && session.campaign) {
+    notifyDtmfWebhooks({
+      userId: session.campaign.userId,
+      campaignId: session.campaign.id,
+      campaignName: session.campaign.name,
+      sessionId: session.id,
+      leadId: session.leadId,
+      callerId: session.callerId,
+      dialedNumber: session.dialedNumber,
+      digits: payload.dtmf!,
+      leadLine: leadRawLine,
+    }).catch(() => {});
+  }
 }

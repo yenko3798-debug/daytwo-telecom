@@ -12,6 +12,8 @@ const updateSchema = z.object({
   maxConcurrentCalls: z.number().int().min(1).max(200).optional(),
   ringTimeoutSeconds: z.number().int().min(10).max(120).optional(),
   metadata: z.record(z.any()).optional(),
+  answeringMachineDetection: z.boolean().optional(),
+  voicemailRetryLimit: z.number().int().min(0).max(5).optional(),
 });
 
 function unauthorized() {
@@ -82,6 +84,10 @@ export async function PATCH(
         ringTimeoutSeconds:
           body.ringTimeoutSeconds ?? campaign.ringTimeoutSeconds,
         metadata: body.metadata ?? campaign.metadata,
+        answeringMachineDetection:
+          body.answeringMachineDetection ?? campaign.answeringMachineDetection,
+        voicemailRetryLimit:
+          body.voicemailRetryLimit ?? campaign.voicemailRetryLimit,
       },
       include: {
         route: { select: { id: true, name: true, provider: true } },

@@ -45,11 +45,14 @@ type CallRow = {
   costCents: number | null;
   dtmf: string | null;
   createdAt: string;
+  voicemailStatus?: string;
   campaign: { id: string; name: string };
   lead: {
     phoneNumber: string | null;
     normalizedNumber?: string | null;
     rawLine: string | null;
+    voicemailStatus?: string | null;
+    voicemailRetries?: number;
   } | null;
 };
 
@@ -58,7 +61,7 @@ function classNames(...a: Array<string | false | undefined>) {
 }
 
 export default function CampaignStatusPage() {
-    const { loading: introLoading } = usePageLoading(720);
+    const { loading: introLoading } = usePageLoading(160);
     const { data: metrics, loading: metricsLoading } = useLiveMetrics({ scope: "me", intervalMs: 5000 });
     const [calls, setCalls] = useState<CallRow[]>([]);
     const [loadingCalls, setLoadingCalls] = useState(true);
@@ -118,7 +121,7 @@ export default function CampaignStatusPage() {
     }, [metrics]);
 
     function exportCsv() {
-      const header = ["id", "time", "caller", "callee", "status", "duration", "cost", "dtmf", "raw_line"].join(",");
+      const header = ["id", "time", "caller", "callee", "status", "duration", "cost", "dtmf", "voicemail_status", "raw_line"].join(",");
       const body = filtered
         .map((r) =>
           [
@@ -130,6 +133,7 @@ export default function CampaignStatusPage() {
             r.durationSeconds ?? 0,
             ((r.costCents ?? 0) / 100).toFixed(4),
             r.dtmf ?? "",
+            r.voicemailStatus ?? "",
             (r.lead?.rawLine ?? "").replace(/,/g, " "),
           ].join(","),
         )
@@ -257,16 +261,17 @@ export default function CampaignStatusPage() {
             <div className="max-h-[520px] overflow-auto">
               <table className="min-w-full divide-y divide-white/60 text-sm dark:divide-white/10">
                   <thead className="bg-white/70 text-xs font-semibold uppercase tracking-[0.18em] text-zinc-500 dark:bg-white/5 dark:text-zinc-400">
-                  <tr>
-                    <th className="px-5 py-4 text-left">Time</th>
-                    <th className="px-5 py-4 text-left">ID</th>
-                    <th className="px-5 py-4 text-left">Caller → Callee</th>
-                    <th className="px-5 py-4 text-left">Status</th>
-                    <th className="px-5 py-4 text-left">Duration</th>
-                    <th className="px-5 py-4 text-left">DTMF</th>
+                    <tr>
+                      <th className="px-5 py-4 text-left">Time</th>
+                      <th className="px-5 py-4 text-left">ID</th>
+                      <th className="px-5 py-4 text-left">Caller → Callee</th>
+                      <th className="px-5 py-4 text-left">Status</th>
+                      <th className="px-5 py-4 text-left">Duration</th>
+                      <th className="px-5 py-4 text-left">DTMF</th>
+                      <th className="px-5 py-4 text-left">Voicemail</th>
                       <th className="px-5 py-4 text-left">Lead input</th>
-                    <th className="px-5 py-4 text-left">Cost</th>
-                  </tr>
+                      <th className="px-5 py-4 text-left">Cost</th>
+                    </tr>
                 </thead>
                 <tbody className="divide-y divide-white/40 bg-white/50 dark:divide-white/5 dark:bg-transparent">
                   <AnimatePresence initial={false}>
@@ -297,16 +302,17 @@ export default function CampaignStatusPage() {
                           <td className="px-5 py-4 tabular-nums text-zinc-600 dark:text-zinc-200">
                             {r.durationSeconds ? `${r.durationSeconds}s` : "—"}
                           </td>
-                          <td className="px-5 py-4 font-mono text-xs text-zinc-500 dark:text-zinc-300">{r.dtmf || ""}</td>
-                          <td className="px-5 py-4 text-xs text-zinc-500 dark:text-zinc-300">
-                            {r.lead?.rawLine ? (
-                              <span title={r.lead.rawLine} className="line-clamp-2 max-w-xs">
-                                {r.lead.rawLine}
-                              </span>
-                            ) : (
-                              "—"
-                            )}
-                          </td>
+                            <td className="px-5 py-4 font-mono text-xs text-zinc-500 dark:text-zinc-300">{r.dtmf || ""}</td>
+                            <td className="px-5 py-4 text-xs capitalize text-zinc-600 dark:text-zinc-300">
+                              {r.voicemailStatus ?? "unknown"}
+                            </td>
+                            <td className="px-5 py-4 text-xs text-zinc-500 dark:text-zinc-300">
+                              {r.lead?.rawLine ? (
+                                <div className="max-w-md whitespace-pre-wrap break-words">{r.lead.rawLine}</div>
+                              ) : (
+                                "—"
+                              )}
+                            </td>
                           <td className="px-5 py-4 tabular-nums text-zinc-700 dark:text-zinc-100">
                             ${((r.costCents ?? 0) / 100).toFixed(4)}
                           </td>

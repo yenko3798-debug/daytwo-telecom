@@ -51,6 +51,19 @@ enum CallStatus {
   CANCELLED  @map("cancelled")
 }
 
+enum VoicemailStatus {
+  UNKNOWN  @map("unknown")
+  HUMAN    @map("human")
+  MACHINE  @map("machine")
+  RETRYING @map("retrying")
+  SKIPPED  @map("skipped")
+}
+
+enum WebhookProvider {
+  DISCORD  @map("discord")
+  TELEGRAM @map("telegram")
+}
+
 enum AdjustmentType {
   CREDIT  @map("credit")
   DEBIT   @map("debit")
@@ -79,6 +92,7 @@ model User {
   adjustments            BalanceAdjustment[]   @relation("UserAdjustments")
   adjustmentsCreated     BalanceAdjustment[]   @relation("AdjustmentsCreatedBy")
   updatedSettings        SystemSetting[]       @relation("SettingUpdatedBy")
+  webhooks               NotificationWebhook[]
 }
 
 model TopUpInvoice {
@@ -163,6 +177,8 @@ model Campaign {
   callsPerMinute      Int             @default(60)
   maxConcurrentCalls  Int             @default(10)
   ringTimeoutSeconds  Int             @default(45)
+  answeringMachineDetection Boolean   @default(false)
+  voicemailRetryLimit Int             @default(0)
   startAt             DateTime?
   startedAt           DateTime?
   completedAt         DateTime?
@@ -194,6 +210,8 @@ model CampaignLead {
   status            LeadStatus   @default(PENDING)
   dtmf              String?
   attempts          Int          @default(0)
+  voicemailStatus   VoicemailStatus @default(UNKNOWN)
+  voicemailRetries  Int          @default(0)
   lastDialedAt      DateTime?
   metadata          Json?
   error             String?
@@ -228,6 +246,7 @@ model CallSession {
   recordingUrl    String?
   metadata        Json?
   error           String?
+  voicemailStatus VoicemailStatus @default(UNKNOWN)
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
@@ -260,6 +279,22 @@ model BalanceAdjustment {
 
   @@index([userId])
   @@index([source])
+}
+
+model NotificationWebhook {
+  id          String           @id @default(cuid())
+  userId      String
+  provider    WebhookProvider
+  name        String
+  config      Json
+  active      Boolean          @default(true)
+  lastFiredAt DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, active])
 }
 
 model SystemSetting {

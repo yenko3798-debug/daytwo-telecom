@@ -75,6 +75,8 @@ type CampaignResponse = {
     dialedCount: number;
     connectedCount: number;
     dtmfCount: number;
+    answeringMachineDetection: boolean;
+    voicemailRetryLimit: number;
   };
 };
 
@@ -165,24 +167,28 @@ type CampaignState = {
   };
   routeName: string;
   flowName: string;
+  amdEnabled: boolean;
+  voicemailRetryLimit: number;
 };
 
 export default function StartCampaignPage() {
-  usePageLoading(520);
+    usePageLoading(160);
   const { push, View: Toasts } = useToast();
 
   const [flows, setFlows] = useState<FlowOption[]>([]);
   const [routes, setRoutes] = useState<RouteOption[]>([]);
   const [loadingOptions, setLoadingOptions] = useState(true);
 
-  const [campaignName, setCampaignName] = useState("Autodial Campaign");
-  const [callerId, setCallerId] = useState("");
-  const [selectedFlow, setSelectedFlow] = useState<string>("");
-  const [selectedRoute, setSelectedRoute] = useState<string>("");
+    const [campaignName, setCampaignName] = useState("Autodial Campaign");
+    const [callerId, setCallerId] = useState("");
+    const [selectedFlow, setSelectedFlow] = useState<string>("");
+    const [selectedRoute, setSelectedRoute] = useState<string>("");
     const [callsPerMinute, setCallsPerMinute] = useState(60);
     const [maxConcurrentCalls, setMaxConcurrentCalls] = useState(10);
     const [ringTimeout, setRingTimeout] = useState(45);
     const [description, setDescription] = useState("");
+    const [detectVoicemail, setDetectVoicemail] = useState(false);
+    const [voicemailRetryLimit, setVoicemailRetryLimit] = useState(2);
 
     const [rawLeadText, setRawLeadText] = useState("");
     const [leads, setLeads] = useState<ParsedLead[]>([]);
@@ -191,6 +197,7 @@ export default function StartCampaignPage() {
     const [uploading, setUploading] = useState(false);
     const [starting, setStarting] = useState(false);
     const [leadUploadResult, setLeadUploadResult] = useState<number>(0);
+      const [lastSkipCount, setLastSkipCount] = useState(0);
     const [dtmfFeed, setDtmfFeed] = useState<any[]>([]);
     const [dtmfFilter, setDtmfFilter] = useState<string | null>(null);
     const [dtmfLoading, setDtmfLoading] = useState(false);
@@ -327,6 +334,8 @@ export default function StartCampaignPage() {
         callsPerMinute,
         maxConcurrentCalls,
         ringTimeoutSeconds: ringTimeout,
+          answeringMachineDetection: detectVoicemail,
+          voicemailRetryLimit: detectVoicemail ? voicemailRetryLimit : 0,
       };
       const res = await fetch("/api/campaigns", {
         method: "POST",
@@ -351,6 +360,8 @@ export default function StartCampaignPage() {
           connected: result.connectedCount,
           dtmf: result.dtmfCount,
         },
+          amdEnabled: result.answeringMachineDetection ?? detectVoicemail,
+          voicemailRetryLimit: result.voicemailRetryLimit ?? (detectVoicemail ? voicemailRetryLimit : 0),
       });
       push("Campaign created", "success");
     } catch (error: any) {
@@ -394,9 +405,14 @@ export default function StartCampaignPage() {
         const data = await res.json().catch(() => null);
         throw new Error(data?.error ?? "Unable to upload leads");
       }
-      const data = await res.json();
-      setLeadUploadResult(data.inserted ?? 0);
-      push(`Uploaded ${data.inserted ?? 0} leads`, "success");
+        const data = await res.json();
+        setLeadUploadResult(data.inserted ?? 0);
+        setLastSkipCount(data.skipped ?? 0);
+        const note =
+          data.skipped && data.skipped > 0
+            ? `Uploaded ${data.inserted ?? 0} leads • skipped ${data.skipped} opt-ins`
+            : `Uploaded ${data.inserted ?? 0} leads`;
+        push(note, "success");
     } catch (error: any) {
       push(error?.message ?? "Unable to upload leads", "error");
     } finally {
@@ -431,6 +447,7 @@ export default function StartCampaignPage() {
   const resetState = useCallback(() => {
     setCampaign(null);
     setLeadUploadResult(0);
+    setLastSkipCount(0);
     setLeads([]);
     setRawLeadText("");
     push("Ready to create another campaign", "info");
@@ -564,6 +581,43 @@ export default function StartCampaignPage() {
               </div>
             </div>
 
+              <div className="rounded-2xl border border-white/60 bg-white/60 p-4 dark:border-white/10 dark:bg-white/5">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-zinc-700 dark:text-zinc-200">Answering machine detection</div>
+                    <div className="text-xs text-zinc-500 dark:text-zinc-400">Hang up on voicemail, optionally retry.</div>
+                  </div>
+                  <label className="inline-flex items-center gap-2 text-xs font-semibold text-zinc-600 dark:text-zinc-300">
+                    <input
+                      type="checkbox"
+                      checked={detectVoicemail}
+                      onChange={(event) => setDetectVoicemail(event.target.checked)}
+                      className="h-4 w-4 rounded border-zinc-300 text-emerald-500 focus:ring-emerald-400"
+                    />
+                    Enabled
+                  </label>
+                </div>
+                <div className="mt-3 grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                      Voicemail retries
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={5}
+                      disabled={!detectVoicemail}
+                      value={voicemailRetryLimit}
+                      onChange={(event) => setVoicemailRetryLimit(Math.min(5, Math.max(0, Number(event.target.value))))}
+                      className="mt-1 w-full rounded-xl border border-white/60 bg-white/70 px-3 py-2 text-sm text-zinc-900 focus:outline-none focus:ring-2 focus:ring-emerald-400/40 disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-white"
+                    />
+                  </div>
+                  <div className="flex items-end text-xs text-zinc-500 dark:text-zinc-400">
+                    Retries requeue the lead immediately when voicemail is detected.
+                  </div>
+                </div>
+              </div>
+
             <div className="rounded-2xl border border-white/60 bg-white/60 p-4 dark:border-white/10 dark:bg-white/5">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
@@ -598,11 +652,16 @@ export default function StartCampaignPage() {
                   className="mt-3 w-full rounded-xl border border-white/60 bg-white/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40 dark:border-white/10 dark:bg-white/5 dark:text-white"
                 />
 
-                <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-zinc-500 dark:text-zinc-400">
-                  <span>{leads.length} deduplicated leads</span>
-                  <span>Cost preview: ${totalCost.toFixed(2)} @ ${RATE_PER_LEAD.toFixed(2)} per lead</span>
-                  {dialPreview ? <span>Dial preview: {dialPreview}</span> : null}
-                </div>
+                  <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-zinc-500 dark:text-zinc-400">
+                    <span>{leads.length} deduplicated leads</span>
+                    <span>Cost preview: ${totalCost.toFixed(2)} @ ${RATE_PER_LEAD.toFixed(2)} per lead</span>
+                    {dialPreview ? <span>Dial preview: {dialPreview}</span> : null}
+                    {lastSkipCount > 0 ? (
+                      <span className="text-rose-500 dark:text-rose-300">
+                        Skipped {lastSkipCount} leads already pressed 1
+                      </span>
+                    ) : null}
+                  </div>
             </div>
 
             <div className="grid gap-3 sm:grid-cols-3">
@@ -682,6 +741,10 @@ export default function StartCampaignPage() {
                   <span>Dialed: {campaign.totals.dialed}</span>
                   <span>Connected: {campaign.totals.connected}</span>
                   <span>DTMF: {campaign.totals.dtmf}</span>
+                    <span>
+                      Voicemail detection:{" "}
+                      {campaign.amdEnabled ? `On • ${campaign.voicemailRetryLimit} retries` : "Off"}
+                    </span>
                 </div>
               </div>
                 <div className="rounded-2xl border border-white/60 bg-white/60 p-4 dark:border-white/10 dark:bg-white/5">
@@ -715,12 +778,11 @@ export default function StartCampaignPage() {
                           <div className="text-xs text-zinc-500 dark:text-zinc-400">
                             {new Date(entry.createdAt).toLocaleTimeString()}
                           </div>
-                          {entry.lead?.rawLine ? (
-                            <details className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">
-                              <summary className="cursor-pointer text-emerald-500">View input line</summary>
-                              <p className="mt-1 break-words">{entry.lead.rawLine}</p>
-                            </details>
-                          ) : null}
+                            {entry.lead?.rawLine ? (
+                              <p className="mt-2 whitespace-pre-wrap break-words text-xs text-zinc-600 dark:text-zinc-300">
+                                {entry.lead.rawLine}
+                              </p>
+                            ) : null}
                         </div>
                       ))}
                     </div>

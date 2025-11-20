@@ -41,6 +41,8 @@ export async function GET(
           callsPerMinute: true,
           maxConcurrentCalls: true,
           userId: true,
+        answeringMachineDetection: true,
+        voicemailRetryLimit: true,
         },
       },
       lead: {

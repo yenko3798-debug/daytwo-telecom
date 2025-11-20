@@ -90,6 +90,8 @@ type SessionPayload = {
     id: string;
     name: string;
     metadata: Record<string, any> | null;
+    answeringMachineDetection?: boolean;
+    voicemailRetryLimit?: number;
   };
   lead: {
     id: string;
@@ -523,6 +525,72 @@ function assertNever(value: never): never {
   throw new Error(`Unsupported node ${(value as FlowNode).type}`);
 }
 
+function startTalkingDetection(channel: any) {
+  return new Promise<void>((resolve, reject) => {
+    if (typeof channel.startTalkingDetection !== "function") {
+      resolve();
+      return;
+    }
+    channel.startTalkingDetection({ direction: "in" }, (error: any) => {
+      if (error) reject(error);
+      else resolve();
+    });
+  });
+}
+
+function stopTalkingDetection(channel: any) {
+  return new Promise<void>((resolve) => {
+    if (typeof channel.stopTalkingDetection !== "function") {
+      resolve();
+      return;
+    }
+    channel.stopTalkingDetection({}, () => resolve());
+  }).catch(() => {});
+}
+
+async function detectAnsweringMachine(state: SessionState) {
+  const enabled = Boolean(state.payload.campaign?.answeringMachineDetection);
+  if (!enabled) return { status: "unknown" as const, analysisMs: 0 };
+  try {
+    await startTalkingDetection(state.channel);
+  } catch {
+    return { status: "unknown" as const, analysisMs: 0 };
+  }
+  return await new Promise<{ status: "human" | "machine" | "unknown"; analysisMs: number }>((resolve) => {
+    const started = Date.now();
+    let spokenAt = 0;
+    let segments = 0;
+    let finished = false;
+    const timeout = setTimeout(() => finish("human"), 8000);
+    const finish = (status: "human" | "machine" | "unknown") => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timeout);
+      client.removeListener("ChannelTalkingStarted", handleStart);
+      client.removeListener("ChannelTalkingFinished", handleStop);
+      stopTalkingDetection(state.channel);
+      resolve({ status, analysisMs: Date.now() - started });
+    };
+    const handleStart = (event: any) => {
+      if (event.channel.id !== state.channel.id) return;
+      segments += 1;
+      spokenAt = Date.now();
+    };
+    const handleStop = (event: any) => {
+      if (event.channel.id !== state.channel.id || !spokenAt) return;
+      const duration = Date.now() - spokenAt;
+      spokenAt = 0;
+      if (segments === 1 && duration > 2500) {
+        finish("machine");
+      } else if (segments >= 1 && duration > 200 && duration < 1500) {
+        finish("human");
+      }
+    };
+    client.on("ChannelTalkingStarted", handleStart);
+    client.on("ChannelTalkingFinished", handleStop);
+  });
+}
+
 async function runFlow(state: SessionState) {
   let current: string | null = state.flow.entry;
   while (current !== null && !state.completed) {
@@ -614,6 +682,24 @@ async function handleSessionStart(event: any, channel: any) {
     sessionId: state.sessionId,
     channelId: channel.id,
   });
+  const amdResult = await detectAnsweringMachine(state);
+  if (amdResult.status !== "unknown") {
+    await notifyPanel("call.voicemail", {
+      sessionId: state.sessionId,
+      voicemail: {
+        status: amdResult.status,
+        confidence: amdResult.status === "machine" ? 0.85 : 0.6,
+        analysisMs: amdResult.analysisMs,
+      },
+    });
+  }
+  if (amdResult.status === "machine") {
+    state.completed = true;
+    await new Promise<void>((resolve) => {
+      channel.hangup({}, () => resolve());
+    }).catch(() => {});
+    return;
+  }
   try {
     await runFlow(state);
   } catch (error: any) {

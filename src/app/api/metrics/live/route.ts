@@ -122,23 +122,25 @@ export async function GET(req: Request) {
       },
       select: { dtmf: true },
     }),
-    prisma.callSession.findMany({
-      where: {
-        ...callWhere,
-      },
-      orderBy: { createdAt: "desc" },
-      take: 100,
-      include: {
-        campaign: { select: { id: true, name: true } },
-        lead: {
-          select: {
-            phoneNumber: true,
-            normalizedNumber: true,
-            metadata: true,
+      prisma.callSession.findMany({
+        where: {
+          ...callWhere,
+        },
+        orderBy: { createdAt: "desc" },
+        take: 100,
+        include: {
+          campaign: { select: { id: true, name: true } },
+          lead: {
+            select: {
+              phoneNumber: true,
+              normalizedNumber: true,
+              metadata: true,
+              voicemailStatus: true,
+              voicemailRetries: true,
+            },
           },
         },
-      },
-    }),
+      }),
   ]);
 
   const campaignSummary = {
@@ -164,22 +166,25 @@ export async function GET(req: Request) {
         ? (call.lead.metadata as Record<string, any>)
         : null;
     const rawLine = typeof leadMeta?.rawLine === "string" ? leadMeta.rawLine : null;
-    return {
-      id: call.id,
-      status: call.status.toLowerCase(),
-      callerId: maskNumber(call.callerId, shouldMask),
-      dialedNumber: maskNumber(call.dialedNumber, shouldMask),
-      dtmf: call.dtmf,
-      durationSeconds: call.durationSeconds,
-      costCents: call.costCents,
-      createdAt: call.createdAt,
-      campaign: call.campaign,
-      lead: {
-        phoneNumber: maskNumber(call.lead?.phoneNumber ?? null, shouldMask),
-        normalizedNumber: maskNumber(call.lead?.normalizedNumber ?? null, shouldMask),
-        rawLine: shouldMask ? null : rawLine,
-      },
-    };
+      return {
+        id: call.id,
+        status: call.status.toLowerCase(),
+        callerId: maskNumber(call.callerId, shouldMask),
+        dialedNumber: maskNumber(call.dialedNumber, shouldMask),
+        dtmf: call.dtmf,
+        durationSeconds: call.durationSeconds,
+        costCents: call.costCents,
+        createdAt: call.createdAt,
+        voicemailStatus: call.voicemailStatus.toLowerCase(),
+        campaign: call.campaign,
+        lead: {
+          phoneNumber: maskNumber(call.lead?.phoneNumber ?? null, shouldMask),
+          normalizedNumber: maskNumber(call.lead?.normalizedNumber ?? null, shouldMask),
+          rawLine: shouldMask ? null : rawLine,
+          voicemailStatus: call.lead?.voicemailStatus.toLowerCase() ?? null,
+          voicemailRetries: call.lead?.voicemailRetries ?? 0,
+        },
+      };
   });
 
   return NextResponse.json({
