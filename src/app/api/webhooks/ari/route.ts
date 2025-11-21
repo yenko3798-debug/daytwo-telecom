@@ -65,13 +65,13 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: true });
       }
 
-      if (isVoicemailEvent) {
+        if (isVoicemailEvent) {
         const session = await prisma.callSession.findUnique({
           where: { id: sessionId },
           select: {
             id: true,
-            leadId: true,
-            campaignId: true,
+              leadId: true,
+              campaignId: true,
             metadata: true,
             campaign: {
               select: { voicemailRetryLimit: true },
@@ -85,12 +85,13 @@ export async function POST(req: Request) {
           return NextResponse.json({ error: "Session not found" }, { status: 404 });
         }
 
-        const currentCount = session.lead?.voicemailCount ?? 0;
-        const retryLimit = session.campaign?.voicemailRetryLimit ?? 0;
-        const retryEligible =
-          typeof body.metadata?.retryEligible === "boolean"
-            ? body.metadata.retryEligible
-            : currentCount < retryLimit;
+          const hasLead = Boolean(session.leadId);
+          const currentCount = session.lead?.voicemailCount ?? 0;
+          const retryLimit = session.campaign?.voicemailRetryLimit ?? 0;
+          const retryEligible =
+            typeof body.metadata?.retryEligible === "boolean"
+              ? body.metadata.retryEligible
+              : hasLead && currentCount < retryLimit;
 
         const existingMeta =
           session.metadata && typeof session.metadata === "object" && !Array.isArray(session.metadata)
@@ -103,7 +104,7 @@ export async function POST(req: Request) {
           attempt: currentCount + 1,
         };
 
-        await prisma.$transaction(async (tx) => {
+          await prisma.$transaction(async (tx) => {
           await tx.callSession.update({
             where: { id: sessionId },
             data: {
@@ -115,14 +116,16 @@ export async function POST(req: Request) {
                 typeof body.metadata?.score === "number" ? body.metadata.score : undefined,
             },
           });
-          await tx.campaignLead.update({
-            where: { id: session.leadId },
-            data: {
-              voicemailCount: { increment: 1 },
-              lastVoicemailAt: new Date(),
-              status: retryEligible ? LeadStatus.QUEUED : LeadStatus.COMPLETED,
-            },
-          });
+            if (hasLead) {
+              await tx.campaignLead.update({
+                where: { id: session.leadId! },
+                data: {
+                  voicemailCount: { increment: 1 },
+                  lastVoicemailAt: new Date(),
+                  status: retryEligible ? LeadStatus.QUEUED : LeadStatus.COMPLETED,
+                },
+              });
+            }
         });
 
         return NextResponse.json({ ok: true, retry: retryEligible });
