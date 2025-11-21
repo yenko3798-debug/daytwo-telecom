@@ -220,6 +220,8 @@ function extractVoicemailConfig(source) {
         enabled: true,
         retryLimit,
         attempt,
+        hangupOnMachine: raw.hangupOnMachine !== false,
+        assumeHumanOnTimeout: raw.assumeHumanOnTimeout !== false,
     };
 }
 function clearVoicemailTimer(state) {
@@ -228,12 +230,45 @@ function clearVoicemailTimer(state) {
         state.voicemail.detectionTimer = undefined;
     }
 }
+function resolveVoicemailListeners(state, status) {
+    if (!state.voicemail)
+        return;
+    const listeners = state.voicemail.listeners ?? [];
+    state.voicemail.listeners = [];
+    for (const listener of listeners) {
+        try {
+            listener(status);
+        }
+        catch (error) {
+            console.error(`Voicemail listener error: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    }
+}
+function waitForVoicemailResult(state) {
+    if (!state.voicemail)
+        return Promise.resolve("unknown");
+    if (state.voicemail.decided) {
+        return Promise.resolve(state.voicemail.status);
+    }
+    return new Promise((resolve) => {
+        state.voicemail?.listeners.push(resolve);
+    });
+}
 function armVoicemailTimer(state) {
     if (!state.voicemail || state.voicemail.decided)
         return;
     clearVoicemailTimer(state);
     const timeout = setTimeout(() => {
-        finalizeVoicemailHuman(state);
+        if (!state.voicemail || state.voicemail.decided)
+            return;
+        if (state.voicemail.config.assumeHumanOnTimeout) {
+            finalizeVoicemailHuman(state);
+        }
+        else {
+            triggerVoicemail(state, { reason: "timeout" }).catch((error) => {
+                console.error(`Voicemail trigger error: ${error?.message ?? error}`);
+            });
+        }
     }, config.voicemailDetection.detectionTimeoutMs);
     state.voicemail.detectionTimer = timeout;
 }
@@ -243,6 +278,7 @@ function finalizeVoicemailHuman(state) {
     clearVoicemailTimer(state);
     state.voicemail.decided = true;
     state.voicemail.status = "human";
+    resolveVoicemailListeners(state, "human");
 }
 async function triggerVoicemail(state, metrics) {
     if (!state.voicemail || state.voicemail.decided)
@@ -253,8 +289,7 @@ async function triggerVoicemail(state, metrics) {
     const attempt = state.voicemail.config.attempt ?? 0;
     const retryEligible = attempt < state.voicemail.config.retryLimit;
     state.voicemail.config.attempt = attempt + 1;
-    state.completed = true;
-    state.completionSent = true;
+    resolveVoicemailListeners(state, "machine");
     try {
         await notifyPanel("call.voicemail", {
             sessionId: state.sessionId,
@@ -268,6 +303,11 @@ async function triggerVoicemail(state, metrics) {
     catch (error) {
         console.error(`Voicemail notify failed: ${error?.message ?? error}`);
     }
+    if (state.voicemail.config.hangupOnMachine === false) {
+        return;
+    }
+    state.completed = true;
+    state.completionSent = true;
     try {
         await new Promise((resolve) => {
             state.channel.hangup({}, () => resolve());
@@ -373,12 +413,30 @@ function createSessionState(payload, channel) {
         completed: false,
         completionSent: false,
     };
-    const voicemailConfig = extractVoicemailConfig(sessionMeta) ?? extractVoicemailConfig(campaignMeta);
+    const hasActivityNode = flow.nodes.some((node) => node.type === "activity");
+    let voicemailConfig = extractVoicemailConfig(sessionMeta) ?? extractVoicemailConfig(campaignMeta);
+    if (!voicemailConfig && hasActivityNode) {
+        voicemailConfig = {
+            enabled: true,
+            retryLimit: 0,
+            attempt: 0,
+            hangupOnMachine: false,
+            assumeHumanOnTimeout: false,
+        };
+    }
+    else if (voicemailConfig && hasActivityNode) {
+        voicemailConfig = {
+            ...voicemailConfig,
+            hangupOnMachine: false,
+            assumeHumanOnTimeout: false,
+        };
+    }
     if (voicemailConfig) {
         state.voicemail = {
             config: voicemailConfig,
             status: "unknown",
             decided: false,
+            listeners: [],
         };
     }
     return state;
@@ -429,6 +487,50 @@ async function handleGather(state, node) {
         attempt += 1;
     }
     return node.defaultNext ?? null;
+}
+async function handleActivity(state, node) {
+    if (!state.voicemail) {
+        state.voicemail = {
+            config: {
+                enabled: true,
+                retryLimit: 0,
+                attempt: 0,
+                hangupOnMachine: false,
+                assumeHumanOnTimeout: false,
+            },
+            status: "unknown",
+            decided: false,
+            listeners: [],
+        };
+    }
+    else {
+        state.voicemail.config.hangupOnMachine = false;
+        state.voicemail.config.assumeHumanOnTimeout = false;
+        if (!state.voicemail.listeners) {
+            state.voicemail.listeners = [];
+        }
+    }
+    if (!state.voicemail.decided) {
+        armVoicemailTimer(state);
+    }
+    const result = await waitForVoicemailResult(state);
+    if (result === "human") {
+        const digit = (node.humanDigit ?? "1").charAt(0);
+        if (digit) {
+            state.variables[`activity:${node.id}`] = digit;
+            state.digits += digit;
+            const aggregateDigits = state.digits;
+            notifyPanel("call.dtmf", {
+                sessionId: state.sessionId,
+                channelId: state.channelId,
+                dtmf: aggregateDigits,
+                digits: digit,
+                variable: `activity:${node.id}`,
+            });
+        }
+        return node.next ?? node.defaultNext ?? null;
+    }
+    return node.defaultNext ?? node.next ?? null;
 }
 async function handleDial(state, node) {
     const bridgeId = newId("bridge");
@@ -530,6 +632,10 @@ async function runFlow(state) {
                     minDigits: node.minDigits ?? 1,
                     timeoutSeconds: node.timeoutSeconds ?? 5,
                 });
+                break;
+            }
+            case "activity": {
+                current = await handleActivity(state, node);
                 break;
             }
             case "dial": {

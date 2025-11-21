@@ -68,7 +68,14 @@ type HangupNode = FlowNodeBase & {
   reason?: string | number;
 };
 
-type FlowNode = PlayNode | GatherNode | DialNode | PauseNode | HangupNode;
+type ActivityNode = FlowNodeBase & {
+  type: "activity";
+  humanDigit?: string;
+  next?: string;
+  defaultNext?: string;
+};
+
+type FlowNode = PlayNode | GatherNode | DialNode | PauseNode | HangupNode | ActivityNode;
 
 type FlowDefinition = {
   name: string;
@@ -145,6 +152,8 @@ type SessionState = {
       enabled: boolean;
       retryLimit: number;
       attempt: number;
+      hangupOnMachine: boolean;
+      assumeHumanOnTimeout: boolean;
     };
     status: "unknown" | "human" | "machine";
     decided: boolean;
@@ -152,6 +161,7 @@ type SessionState = {
     firstSpeechMs?: number;
     firstSilenceMs?: number;
     detectionTimer?: NodeJS.Timeout;
+    listeners: Array<(status: "human" | "machine") => void>;
   };
   answeredAt?: number;
 };
@@ -379,6 +389,8 @@ function extractVoicemailConfig(source?: Record<string, any> | null) {
     enabled: true,
     retryLimit,
     attempt,
+    hangupOnMachine: raw.hangupOnMachine !== false,
+    assumeHumanOnTimeout: raw.assumeHumanOnTimeout !== false,
   };
 }
 
@@ -389,11 +401,41 @@ function clearVoicemailTimer(state: SessionState) {
   }
 }
 
+function resolveVoicemailListeners(state: SessionState, status: "human" | "machine") {
+  if (!state.voicemail) return;
+  const listeners = state.voicemail.listeners ?? [];
+  state.voicemail.listeners = [];
+  for (const listener of listeners) {
+    try {
+      listener(status);
+    } catch (error) {
+      console.error(`Voicemail listener error: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+}
+
+function waitForVoicemailResult(state: SessionState): Promise<"human" | "machine" | "unknown"> {
+  if (!state.voicemail) return Promise.resolve("unknown");
+  if (state.voicemail.decided) {
+    return Promise.resolve(state.voicemail.status);
+  }
+  return new Promise((resolve) => {
+    state.voicemail?.listeners.push(resolve);
+  });
+}
+
 function armVoicemailTimer(state: SessionState) {
   if (!state.voicemail || state.voicemail.decided) return;
   clearVoicemailTimer(state);
   const timeout = setTimeout(() => {
-    finalizeVoicemailHuman(state);
+    if (!state.voicemail || state.voicemail.decided) return;
+    if (state.voicemail.config.assumeHumanOnTimeout) {
+      finalizeVoicemailHuman(state);
+    } else {
+      triggerVoicemail(state, { reason: "timeout" }).catch((error) => {
+        console.error(`Voicemail trigger error: ${error?.message ?? error}`);
+      });
+    }
   }, config.voicemailDetection.detectionTimeoutMs);
   state.voicemail.detectionTimer = timeout;
 }
@@ -403,6 +445,7 @@ function finalizeVoicemailHuman(state: SessionState) {
   clearVoicemailTimer(state);
   state.voicemail.decided = true;
   state.voicemail.status = "human";
+  resolveVoicemailListeners(state, "human");
 }
 
 async function triggerVoicemail(state: SessionState, metrics: { reason: string; silenceMs?: number; speechMs?: number }) {
@@ -413,8 +456,7 @@ async function triggerVoicemail(state: SessionState, metrics: { reason: string; 
   const attempt = state.voicemail.config.attempt ?? 0;
   const retryEligible = attempt < state.voicemail.config.retryLimit;
   state.voicemail.config.attempt = attempt + 1;
-  state.completed = true;
-  state.completionSent = true;
+  resolveVoicemailListeners(state, "machine");
   try {
     await notifyPanel("call.voicemail", {
       sessionId: state.sessionId,
@@ -427,6 +469,11 @@ async function triggerVoicemail(state: SessionState, metrics: { reason: string; 
   } catch (error: any) {
     console.error(`Voicemail notify failed: ${error?.message ?? error}`);
   }
+  if (state.voicemail.config.hangupOnMachine === false) {
+    return;
+  }
+  state.completed = true;
+  state.completionSent = true;
   try {
     await new Promise<void>((resolve) => {
       state.channel.hangup({}, () => resolve());
@@ -535,13 +582,30 @@ function createSessionState(payload: SessionPayload, channel: any) {
     completed: false,
     completionSent: false,
   };
-  const voicemailConfig =
+  const hasActivityNode = flow.nodes.some((node) => node.type === "activity");
+  let voicemailConfig =
     extractVoicemailConfig(sessionMeta) ?? extractVoicemailConfig(campaignMeta);
+  if (!voicemailConfig && hasActivityNode) {
+    voicemailConfig = {
+      enabled: true,
+      retryLimit: 0,
+      attempt: 0,
+      hangupOnMachine: false,
+      assumeHumanOnTimeout: false,
+    };
+  } else if (voicemailConfig && hasActivityNode) {
+    voicemailConfig = {
+      ...voicemailConfig,
+      hangupOnMachine: false,
+      assumeHumanOnTimeout: false,
+    };
+  }
   if (voicemailConfig) {
     state.voicemail = {
       config: voicemailConfig,
       status: "unknown",
       decided: false,
+      listeners: [],
     };
   }
   return state;
@@ -593,6 +657,50 @@ async function handleGather(state: SessionState, node: GatherNode): Promise<stri
     attempt += 1;
   }
   return node.defaultNext ?? null;
+}
+
+async function handleActivity(state: SessionState, node: ActivityNode): Promise<string | null> {
+  if (!state.voicemail) {
+    state.voicemail = {
+      config: {
+        enabled: true,
+        retryLimit: 0,
+        attempt: 0,
+        hangupOnMachine: false,
+        assumeHumanOnTimeout: false,
+      },
+      status: "unknown",
+      decided: false,
+      listeners: [],
+    };
+  } else {
+    state.voicemail.config.hangupOnMachine = false;
+    state.voicemail.config.assumeHumanOnTimeout = false;
+    if (!state.voicemail.listeners) {
+      state.voicemail.listeners = [];
+    }
+  }
+  if (!state.voicemail.decided) {
+    armVoicemailTimer(state);
+  }
+  const result = await waitForVoicemailResult(state);
+  if (result === "human") {
+    const digit = (node.humanDigit ?? "1").charAt(0);
+    if (digit) {
+      state.variables[`activity:${node.id}`] = digit;
+      state.digits += digit;
+      const aggregateDigits = state.digits;
+      notifyPanel("call.dtmf", {
+        sessionId: state.sessionId,
+        channelId: state.channelId,
+        dtmf: aggregateDigits,
+        digits: digit,
+        variable: `activity:${node.id}`,
+      });
+    }
+    return node.next ?? node.defaultNext ?? null;
+  }
+  return node.defaultNext ?? node.next ?? null;
 }
 
 async function handleDial(state: SessionState, node: DialNode): Promise<string | null> {
@@ -693,6 +801,10 @@ async function runFlow(state: SessionState) {
         });
         break;
       }
+    case "activity": {
+      current = await handleActivity(state, node);
+      break;
+    }
       case "dial": {
         current = await handleDial(state, node);
         break;

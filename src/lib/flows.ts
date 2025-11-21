@@ -60,12 +60,20 @@ const HangupNodeSchema = BaseNodeSchema.extend({
   reason: z.string().max(64).optional(),
 });
 
+const ActivityNodeSchema = BaseNodeSchema.extend({
+  type: z.literal("activity"),
+  humanDigit: z.string().regex(/^[0-9*#]$/).default("1"),
+  next: z.string().optional(),
+  defaultNext: z.string().optional(),
+});
+
 export const FlowNodeSchema = z.discriminatedUnion("type", [
   PlayNodeSchema,
   GatherNodeSchema,
   DialNodeSchema,
   PauseNodeSchema,
   HangupNodeSchema,
+  ActivityNodeSchema,
 ]);
 
 const FlowDefinitionCore = z.object({
@@ -103,14 +111,16 @@ export const FlowDefinitionSchema = FlowDefinitionCore.superRefine((value, ctx) 
         path: ["nodes", value.nodes.indexOf(node), "next"],
       });
     }
-    if (node.type === "gather") {
-      for (const [digit, target] of Object.entries(node.branches)) {
-        if (!ids.has(target)) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: `Node ${node.id} branch ${digit} targets missing node ${target}`,
-            path: ["nodes", value.nodes.indexOf(node), "branches", digit],
-          });
+    if (node.type === "gather" || node.type === "activity") {
+      if ("branches" in node && node.branches) {
+        for (const [digit, target] of Object.entries(node.branches)) {
+          if (!ids.has(target)) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: `Node ${node.id} branch ${digit} targets missing node ${target}`,
+              path: ["nodes", value.nodes.indexOf(node), "branches", digit],
+            });
+          }
         }
       }
       if (node.defaultNext && !ids.has(node.defaultNext)) {
