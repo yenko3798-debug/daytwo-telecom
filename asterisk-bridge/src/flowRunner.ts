@@ -245,7 +245,9 @@ async function ensureNormalizedVariants(file: string) {
   const base = file.replace(/\.[^/.]+$/, "");
   const wavPath = `${base}.wav`;
   const ulawPath = `${base}.ulaw`;
-  if (!(await fileExists(wavPath))) {
+  const needsNormalize =
+    !(await fileExists(wavPath)) || file.toLowerCase().endsWith(".wav");
+  if (needsNormalize) {
     await normalizeToWav(file, wavPath);
   }
   if (!(await fileExists(ulawPath))) {
@@ -270,9 +272,19 @@ async function ensureMedia(playback: Playback) {
   if (relativePath.startsWith("..")) {
     throw new Error("Media files must be inside ASTERISK_SOUNDS_ROOT");
   }
-  const sanitizedPath = relativePath.replace(/^\/+/, "");
+  let sanitizedPath = relativePath.replace(/^\/+/, "");
   const prefix = normalizePrefix(config.soundPrefix);
-  const needsPrefix = prefix.length > 0 && sanitizedPath.startsWith(prefix) ? sanitizedPath : `${prefix}${sanitizedPath}`;
+  if (prefix.length > 0) {
+    const prefixBase = prefix.replace(/\/$/, "");
+    const duplicateSegment = `${prefixBase}/${prefixBase}/`;
+    while (sanitizedPath.startsWith(duplicateSegment)) {
+      sanitizedPath = sanitizedPath.slice(prefixBase.length + 1);
+    }
+  }
+  const needsPrefix =
+    prefix.length > 0 && sanitizedPath.startsWith(prefix)
+      ? sanitizedPath
+      : `${prefix}${sanitizedPath}`;
   return `sound:${needsPrefix}`;
 }
 
