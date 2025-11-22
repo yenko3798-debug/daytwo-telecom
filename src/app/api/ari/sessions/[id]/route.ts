@@ -109,8 +109,19 @@ export async function GET(
           }
         : null);
 
-    const flow =
-      flowSnapshot?.definition ? FlowDefinitionSchema.parse(flowSnapshot.definition) : null;
+    let flow = null;
+    if (flowSnapshot?.definition) {
+      const normalized = JSON.parse(JSON.stringify(flowSnapshot.definition));
+      const parsed = FlowDefinitionSchema.safeParse(normalized);
+      if (parsed.success) {
+        flow = parsed.data;
+      } else {
+        console.error(
+          `Flow definition invalid for session ${session.id}: ${parsed.error.message}`
+        );
+        flow = normalized;
+      }
+    }
 
   return NextResponse.json({
     session: {

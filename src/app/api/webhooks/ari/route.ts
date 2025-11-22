@@ -142,9 +142,10 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ ok: true });
   } catch (error: any) {
+    console.error("ARI webhook error", error);
     if (error?.issues?.[0]?.message) {
       return NextResponse.json({ error: error.issues[0].message }, { status: 400 });
     }
-    return NextResponse.json({ error: "Unable to process webhook" }, { status: 400 });
+    return NextResponse.json({ error: error?.message ?? "Unable to process webhook" }, { status: 400 });
   }
 }
