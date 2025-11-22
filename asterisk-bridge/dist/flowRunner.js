@@ -1,6 +1,6 @@
 import AriClient from "ari-client";
 import { promises as fs } from "fs";
-import { join, relative } from "path";
+import { join, relative, basename } from "path";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { config } from "./config.js";
@@ -89,7 +89,9 @@ async function convertWavToUlaw(input, output) {
     return output;
 }
 async function ensureNormalizedVariants(file) {
-    const base = file.replace(/\.[^/.]+$/, "");
+    const fileName = basename(file);
+    const key = fileName.replace(/\.[^/.]+$/, "") || hashKey(file);
+    const base = join(config.soundsDir, key);
     const wavPath = `${base}.wav`;
     const ulawPath = `${base}.ulaw`;
     const needsNormalize = !(await fileExists(wavPath)) || file.toLowerCase().endsWith(".wav");
