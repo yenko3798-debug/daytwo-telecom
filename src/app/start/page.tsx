@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { findPhoneNumbersInText, type CountryCode } from "libphonenumber-js";
 import { PageFrame, MotionCard, ShimmerTile } from "@/components/ui/LuxuryPrimitives";
@@ -198,51 +198,69 @@ export default function StartCampaignPage() {
     const [amdEnabled, setAmdEnabled] = useState(false);
     const [voicemailRetryLimit, setVoicemailRetryLimit] = useState(0);
 
-  const loadOptions = useCallback(async () => {
-    try {
-      setLoadingOptions(true);
-      const [flowRes, routeRes] = await Promise.all([
-        fetch("/api/flows", { cache: "no-store" }),
-        fetch("/api/routes?status=active", { cache: "no-store" }),
-      ]);
-      if (!flowRes.ok) {
-        const data = await flowRes.json().catch(() => null);
-        throw new Error(data?.error ?? "Unable to load flows");
-      }
-      if (!routeRes.ok) {
-        const data = await routeRes.json().catch(() => null);
-        throw new Error(data?.error ?? "Unable to load routes");
-      }
-      const flowData = await flowRes.json();
-      const routeData = await routeRes.json();
-      const flowOptions: FlowOption[] = (flowData.flows ?? []).map((flow: any) => ({
-        id: flow.id,
-        name: flow.name,
-        description: flow.description ?? "",
-      }));
-      const routeOptions: RouteOption[] = (routeData.routes ?? []).map((route: any) => ({
-        id: route.id,
-        name: route.name,
-        provider: route.provider,
-        domain: route.domain,
-        trunkPrefix: route.trunkPrefix ?? null,
-        authenticationRequired: route.authenticationRequired,
-        isPublic: route.isPublic,
-      }));
-      setFlows(flowOptions);
-      setRoutes(routeOptions);
-      if (!selectedFlow && flowOptions.length) setSelectedFlow(flowOptions[0].id);
-      if (!selectedRoute && routeOptions.length) setSelectedRoute(routeOptions[0].id);
-    } catch (error: any) {
-      push(error?.message ?? "Unable to load options", "error");
-    } finally {
-      setLoadingOptions(false);
-    }
-  }, [push, selectedFlow, selectedRoute]);
+    const seededDefaults = useRef(false);
 
-  useEffect(() => {
-    loadOptions();
-  }, [loadOptions]);
+    const loadOptions = useCallback(
+      async (signal?: AbortSignal) => {
+        try {
+          setLoadingOptions(true);
+          const [flowRes, routeRes] = await Promise.all([
+            fetch("/api/flows", { cache: "no-store", signal }),
+            fetch("/api/routes?status=active", { cache: "no-store", signal }),
+          ]);
+          if (!flowRes.ok) {
+            const data = await flowRes.json().catch(() => null);
+            throw new Error(data?.error ?? "Unable to load flows");
+          }
+          if (!routeRes.ok) {
+            const data = await routeRes.json().catch(() => null);
+            throw new Error(data?.error ?? "Unable to load routes");
+          }
+          const flowData = await flowRes.json();
+          const routeData = await routeRes.json();
+          if (signal?.aborted) return;
+          const flowOptions: FlowOption[] = (flowData.flows ?? []).map((flow: any) => ({
+            id: flow.id,
+            name: flow.name,
+            description: flow.description ?? "",
+          }));
+          const routeOptions: RouteOption[] = (routeData.routes ?? []).map((route: any) => ({
+            id: route.id,
+            name: route.name,
+            provider: route.provider,
+            domain: route.domain,
+            trunkPrefix: route.trunkPrefix ?? null,
+            authenticationRequired: route.authenticationRequired,
+            isPublic: route.isPublic,
+          }));
+          setFlows(flowOptions);
+          setRoutes(routeOptions);
+          if (!seededDefaults.current) {
+            if (flowOptions.length) {
+              setSelectedFlow((prev) => prev || flowOptions[0].id);
+            }
+            if (routeOptions.length) {
+              setSelectedRoute((prev) => prev || routeOptions[0].id);
+            }
+            seededDefaults.current = true;
+          }
+        } catch (error: any) {
+          if (signal?.aborted) return;
+          push(error?.message ?? "Unable to load options", "error");
+        } finally {
+          if (!signal?.aborted) {
+            setLoadingOptions(false);
+          }
+        }
+      },
+      [push],
+    );
+
+    useEffect(() => {
+      const controller = new AbortController();
+      loadOptions(controller.signal);
+      return () => controller.abort();
+    }, [loadOptions]);
 
   useEffect(() => {
     const parsed = extractPhones(rawLeadText);

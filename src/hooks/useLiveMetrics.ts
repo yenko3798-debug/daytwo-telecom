@@ -59,7 +59,11 @@ export function useLiveMetrics({ scope = "me", rangeHours = 24, intervalMs = 600
 
   useEffect(() => {
     let active = true;
+    const controllers = new Set<AbortController>();
+
     async function load() {
+      const controller = new AbortController();
+      controllers.add(controller);
       try {
         const params = new URLSearchParams({
           scope,
@@ -67,6 +71,7 @@ export function useLiveMetrics({ scope = "me", rangeHours = 24, intervalMs = 600
         });
         const res = await fetch(`/api/metrics/live?${params.toString()}`, {
           cache: "no-store",
+          signal: controller.signal,
         });
         if (!res.ok) {
           const message = (await res.json().catch(() => null))?.error ?? "Unable to load metrics";
@@ -79,10 +84,13 @@ export function useLiveMetrics({ scope = "me", rangeHours = 24, intervalMs = 600
           setError(null);
         }
       } catch (err: any) {
+        if (controller.signal.aborted) return;
         if (active) {
           setError(err?.message ?? "Unable to load metrics");
           setLoading(false);
         }
+      } finally {
+        controllers.delete(controller);
       }
     }
 
@@ -90,6 +98,8 @@ export function useLiveMetrics({ scope = "me", rangeHours = 24, intervalMs = 600
     const timer = setInterval(load, intervalMs);
     return () => {
       active = false;
+      controllers.forEach((controller) => controller.abort());
+      controllers.clear();
       clearInterval(timer);
     };
   }, [scope, rangeHours, intervalMs]);
