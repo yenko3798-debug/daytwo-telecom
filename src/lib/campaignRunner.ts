@@ -139,7 +139,7 @@ type CampaignWithContext = Campaign & {
     id: string;
     name: string;
     definition: Prisma.JsonValue;
-    metadata: Prisma.JsonValue | null;
+      metadata: Prisma.JsonValue | null;
     updatedAt: Date;
   } | null;
   metadata: Prisma.JsonValue | null;
@@ -227,28 +227,33 @@ async function dispatchLead(
         throw new Error("INSUFFICIENT_FUNDS");
       }
 
-      const sessionRecord = await tx.callSession.create({
-        data: {
-          campaignId: campaign.id,
-          leadId: lead.id,
-          routeId: campaign.route.id,
-          status: CallStatus.PLACING,
-          callerId: campaign.callerId,
-          dialedNumber: dial,
-          metadata: {
-            flow: {
-              id: flowContext.id,
-              version: flowContext.version,
-              summary: flowContext.summary,
-              checksum: flowContext.checksum,
-              definition: flowContext.definition,
-            },
-            rate: {
-              perLeadCents: RATE_PER_LEAD_CENTS,
+        const sessionRecord = await tx.callSession.create({
+          data: {
+            campaignId: campaign.id,
+            leadId: lead.id,
+            routeId: campaign.route.id,
+            status: CallStatus.PLACING,
+            callerId: campaign.callerId,
+            dialedNumber: dial,
+            metadata: {
+              flow: {
+                id: flowContext.id,
+                version: flowContext.version,
+                summary: flowContext.summary,
+                checksum: flowContext.checksum,
+                definition: flowContext.definition,
+              },
+              rate: {
+                perLeadCents: RATE_PER_LEAD_CENTS,
+              },
+              voicemail: {
+                enabled: Boolean(campaign.amdEnabled),
+                retryLimit: campaign.voicemailRetryLimit ?? 0,
+                attempt: lead.voicemailCount ?? 0,
+              },
             },
           },
-        },
-      });
+        });
 
       await tx.user.update({
         where: { id: campaign.userId },

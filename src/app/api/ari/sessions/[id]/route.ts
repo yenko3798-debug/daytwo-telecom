@@ -19,7 +19,7 @@ function verifyToken(request: Request) {
 
 export async function GET(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     if (!verifyToken(request)) return forbidden();
@@ -27,42 +27,53 @@ export async function GET(
     return NextResponse.json({ error: error?.message ?? "Server misconfigured" }, { status: 500 });
   }
 
-  const session = await prisma.callSession.findUnique({
-    where: { id: params.id },
-    include: {
-      campaign: {
-        select: {
-          id: true,
-          name: true,
-          metadata: true,
-          callFlowId: true,
-          callerId: true,
-          ringTimeoutSeconds: true,
-          callsPerMinute: true,
-          maxConcurrentCalls: true,
-          userId: true,
+  const { id } = await params;
+
+    const session = await prisma.callSession.findUnique({
+      where: { id },
+      include: {
+        campaign: {
+          select: {
+            id: true,
+            name: true,
+            metadata: true,
+            callFlowId: true,
+            callerId: true,
+            ringTimeoutSeconds: true,
+            callsPerMinute: true,
+            maxConcurrentCalls: true,
+            userId: true,
+            callFlow: {
+              select: {
+                id: true,
+                name: true,
+                definition: true,
+                metadata: true,
+                updatedAt: true,
+              },
+            },
+          },
+        },
+        lead: {
+          select: {
+            id: true,
+            phoneNumber: true,
+            normalizedNumber: true,
+            metadata: true,
+          },
+        },
+        route: {
+          select: {
+            id: true,
+            name: true,
+            domain: true,
+            trunkPrefix: true,
+            outboundUri: true,
+            metadata: true,
+          },
         },
       },
-      lead: {
-        select: {
-          id: true,
-          phoneNumber: true,
-          normalizedNumber: true,
-          metadata: true,
-        },
-      },
-      route: {
-        select: {
-          id: true,
-          name: true,
-          domain: true,
-          trunkPrefix: true,
-          outboundUri: true,
-          metadata: true,
-        },
-      },
-    },
-  });
+    });
 
   if (!session) {
     return NextResponse.json({ error: "Session not found" }, { status: 404 });
@@ -81,13 +92,36 @@ export async function GET(
       ? (session.metadata as Record<string, any>)
       : undefined;
 
-  const flowSnapshot =
-    (sessionMeta?.flow?.definition && sessionMeta.flow) ||
-    (campaignMeta?.flow?.definition && campaignMeta.flow) ||
-    null;
+    const flowSnapshot =
+      (sessionMeta?.flow?.definition && sessionMeta.flow) ||
+      (campaignMeta?.flow?.definition && campaignMeta.flow) ||
+      (session.campaign.callFlow?.definition
+        ? {
+            id: session.campaign.callFlow.id,
+            version: session.campaign.callFlow.updatedAt.toISOString(),
+            summary:
+              session.campaign.callFlow.metadata &&
+              typeof session.campaign.callFlow.metadata === "object" &&
+              !Array.isArray(session.campaign.callFlow.metadata)
+                ? (session.campaign.callFlow.metadata as Record<string, any>).summary ?? null
+                : null,
+            definition: session.campaign.callFlow.definition as Record<string, any>,
+          }
+        : null);
 
-  const flow =
-    flowSnapshot?.definition ? FlowDefinitionSchema.parse(flowSnapshot.definition) : null;
+    let flow = null;
+    if (flowSnapshot?.definition) {
+      const normalized = JSON.parse(JSON.stringify(flowSnapshot.definition));
+      const parsed = FlowDefinitionSchema.safeParse(normalized);
+      if (parsed.success) {
+        flow = parsed.data;
+      } else {
+        console.error(
+          `Flow definition invalid for session ${session.id}: ${parsed.error.message}`
+        );
+        flow = normalized;
+      }
+    }
 
   return NextResponse.json({
     session: {

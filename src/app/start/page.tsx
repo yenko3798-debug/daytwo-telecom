@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState, useDeferredValue } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { findPhoneNumbersInText, type CountryCode } from "libphonenumber-js";
 import { PageFrame, MotionCard, ShimmerTile } from "@/components/ui/LuxuryPrimitives";
@@ -185,66 +185,83 @@ export default function StartCampaignPage() {
     const [description, setDescription] = useState("");
 
     const [rawLeadText, setRawLeadText] = useState("");
-    const [leads, setLeads] = useState<ParsedLead[]>([]);
+    const deferredLeadText = useDeferredValue(rawLeadText);
+    const leads = useMemo(() => extractPhones(deferredLeadText), [deferredLeadText]);
     const [campaign, setCampaign] = useState<CampaignState | null>(null);
     const [creating, setCreating] = useState(false);
     const [uploading, setUploading] = useState(false);
     const [starting, setStarting] = useState(false);
     const [leadUploadResult, setLeadUploadResult] = useState<number>(0);
+    const [skippedLines, setSkippedLines] = useState<number>(0);
     const [dtmfFeed, setDtmfFeed] = useState<any[]>([]);
     const [dtmfFilter, setDtmfFilter] = useState<string | null>(null);
     const [dtmfLoading, setDtmfLoading] = useState(false);
+    const [amdEnabled, setAmdEnabled] = useState(false);
+    const [voicemailRetryLimit, setVoicemailRetryLimit] = useState(0);
 
-  const loadOptions = useCallback(async () => {
-    try {
-      setLoadingOptions(true);
-      const [flowRes, routeRes] = await Promise.all([
-        fetch("/api/flows", { cache: "no-store" }),
-        fetch("/api/routes?status=active", { cache: "no-store" }),
-      ]);
-      if (!flowRes.ok) {
-        const data = await flowRes.json().catch(() => null);
-        throw new Error(data?.error ?? "Unable to load flows");
-      }
-      if (!routeRes.ok) {
-        const data = await routeRes.json().catch(() => null);
-        throw new Error(data?.error ?? "Unable to load routes");
-      }
-      const flowData = await flowRes.json();
-      const routeData = await routeRes.json();
-      const flowOptions: FlowOption[] = (flowData.flows ?? []).map((flow: any) => ({
-        id: flow.id,
-        name: flow.name,
-        description: flow.description ?? "",
-      }));
-      const routeOptions: RouteOption[] = (routeData.routes ?? []).map((route: any) => ({
-        id: route.id,
-        name: route.name,
-        provider: route.provider,
-        domain: route.domain,
-        trunkPrefix: route.trunkPrefix ?? null,
-        authenticationRequired: route.authenticationRequired,
-        isPublic: route.isPublic,
-      }));
-      setFlows(flowOptions);
-      setRoutes(routeOptions);
-      if (!selectedFlow && flowOptions.length) setSelectedFlow(flowOptions[0].id);
-      if (!selectedRoute && routeOptions.length) setSelectedRoute(routeOptions[0].id);
-    } catch (error: any) {
-      push(error?.message ?? "Unable to load options", "error");
-    } finally {
-      setLoadingOptions(false);
-    }
-  }, [push, selectedFlow, selectedRoute]);
+    const seededDefaults = useRef(false);
 
-  useEffect(() => {
-    loadOptions();
-  }, [loadOptions]);
+    const loadOptions = useCallback(
+      async (signal?: AbortSignal) => {
+        try {
+          setLoadingOptions(true);
+          const [flowRes, routeRes] = await Promise.all([
+            fetch("/api/flows", { cache: "no-store", signal }),
+            fetch("/api/routes?status=active", { cache: "no-store", signal }),
+          ]);
+          if (!flowRes.ok) {
+            const data = await flowRes.json().catch(() => null);
+            throw new Error(data?.error ?? "Unable to load flows");
+          }
+          if (!routeRes.ok) {
+            const data = await routeRes.json().catch(() => null);
+            throw new Error(data?.error ?? "Unable to load routes");
+          }
+          const flowData = await flowRes.json();
+          const routeData = await routeRes.json();
+          if (signal?.aborted) return;
+          const flowOptions: FlowOption[] = (flowData.flows ?? []).map((flow: any) => ({
+            id: flow.id,
+            name: flow.name,
+            description: flow.description ?? "",
+          }));
+          const routeOptions: RouteOption[] = (routeData.routes ?? []).map((route: any) => ({
+            id: route.id,
+            name: route.name,
+            provider: route.provider,
+            domain: route.domain,
+            trunkPrefix: route.trunkPrefix ?? null,
+            authenticationRequired: route.authenticationRequired,
+            isPublic: route.isPublic,
+          }));
+          setFlows(flowOptions);
+          setRoutes(routeOptions);
+          if (!seededDefaults.current) {
+            if (flowOptions.length) {
+              setSelectedFlow((prev) => prev || flowOptions[0].id);
+            }
+            if (routeOptions.length) {
+              setSelectedRoute((prev) => prev || routeOptions[0].id);
+            }
+            seededDefaults.current = true;
+          }
+        } catch (error: any) {
+          if (signal?.aborted) return;
+          push(error?.message ?? "Unable to load options", "error");
+        } finally {
+          if (!signal?.aborted) {
+            setLoadingOptions(false);
+          }
+        }
+      },
+      [push],
+    );
 
-  useEffect(() => {
-    const parsed = extractPhones(rawLeadText);
-    setLeads(parsed);
-  }, [rawLeadText]);
+    useEffect(() => {
+      const controller = new AbortController();
+      loadOptions(controller.signal);
+      return () => controller.abort();
+    }, [loadOptions]);
 
     useEffect(() => {
       if (!campaign?.id) {
@@ -282,13 +299,13 @@ export default function StartCampaignPage() {
       };
     }, [campaign?.id]);
 
-  const handleFile = useCallback((file: File) => {
+    const handleFile = useCallback((file: File) => {
     const reader = new FileReader();
     reader.onload = () => {
       const text = String(reader.result || "");
       setRawLeadText(text);
-      const parsed = extractPhones(text);
-      push(`Parsed ${parsed.length} leads`, "success");
+        const parsed = extractPhones(text);
+        push(`Parsed ${parsed.length} leads`, "success");
     };
     reader.readAsText(file);
   }, [push]);
@@ -327,6 +344,8 @@ export default function StartCampaignPage() {
         callsPerMinute,
         maxConcurrentCalls,
         ringTimeoutSeconds: ringTimeout,
+          amdEnabled,
+          voicemailRetryLimit: Math.max(0, Number.isFinite(voicemailRetryLimit) ? voicemailRetryLimit : 0),
       };
       const res = await fetch("/api/campaigns", {
         method: "POST",
@@ -367,6 +386,8 @@ export default function StartCampaignPage() {
     callsPerMinute,
     maxConcurrentCalls,
     ringTimeout,
+      amdEnabled,
+      voicemailRetryLimit,
     push,
   ]);
 
@@ -394,9 +415,13 @@ export default function StartCampaignPage() {
         const data = await res.json().catch(() => null);
         throw new Error(data?.error ?? "Unable to upload leads");
       }
-      const data = await res.json();
-      setLeadUploadResult(data.inserted ?? 0);
-      push(`Uploaded ${data.inserted ?? 0} leads`, "success");
+        const data = await res.json();
+        const inserted = data.inserted ?? 0;
+        const skipped = data.skipped ?? 0;
+        setLeadUploadResult(inserted);
+        setSkippedLines(skipped);
+        const suffix = skipped > 0 ? ` · skipped ${skipped} pressed-1 lines` : "";
+        push(`Uploaded ${inserted} leads${suffix}`, "success");
     } catch (error: any) {
       push(error?.message ?? "Unable to upload leads", "error");
     } finally {
@@ -431,8 +456,10 @@ export default function StartCampaignPage() {
   const resetState = useCallback(() => {
     setCampaign(null);
     setLeadUploadResult(0);
-    setLeads([]);
+      setSkippedLines(0);
     setRawLeadText("");
+      setAmdEnabled(false);
+      setVoicemailRetryLimit(0);
     push("Ready to create another campaign", "info");
   }, [push]);
 
@@ -564,6 +591,32 @@ export default function StartCampaignPage() {
               </div>
             </div>
 
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="flex items-center gap-3 rounded-2xl border border-white/60 bg-white/70 px-4 py-3 text-sm text-zinc-700 dark:border-white/10 dark:bg-white/5 dark:text-zinc-200">
+                  <input
+                    type="checkbox"
+                    checked={amdEnabled}
+                    onChange={(event) => setAmdEnabled(event.target.checked)}
+                    className="h-4 w-4 accent-emerald-500"
+                  />
+                  Enable answering machine detection
+                </label>
+                <div>
+                  <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                    Voicemail retry count
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={5}
+                    value={voicemailRetryLimit}
+                    disabled={!amdEnabled}
+                    onChange={(event) => setVoicemailRetryLimit(Number(event.target.value))}
+                    className="mt-1 w-full rounded-xl border border-white/60 bg-white/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40 disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/10 dark:bg-white/5 dark:text-white"
+                  />
+                </div>
+              </div>
+
             <div className="rounded-2xl border border-white/60 bg-white/60 p-4 dark:border-white/10 dark:bg-white/5">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
@@ -669,6 +722,10 @@ export default function StartCampaignPage() {
                   <span>Leads uploaded</span>
                   <span>{leadUploadResult}</span>
                 </div>
+                  <div className="flex items-center justify-between">
+                    <span>Pressed 1 skipped</span>
+                    <span>{skippedLines}</span>
+                  </div>
                 <div className="flex items-center justify-between">
                   <span>Total cost (est.)</span>
                   <span>${(leadUploadResult * RATE_PER_LEAD).toFixed(2)}</span>
@@ -715,12 +772,11 @@ export default function StartCampaignPage() {
                           <div className="text-xs text-zinc-500 dark:text-zinc-400">
                             {new Date(entry.createdAt).toLocaleTimeString()}
                           </div>
-                          {entry.lead?.rawLine ? (
-                            <details className="mt-1 text-xs text-zinc-600 dark:text-zinc-300">
-                              <summary className="cursor-pointer text-emerald-500">View input line</summary>
-                              <p className="mt-1 break-words">{entry.lead.rawLine}</p>
-                            </details>
-                          ) : null}
+                            {entry.lead?.rawLine ? (
+                              <p className="mt-2 whitespace-pre-wrap break-words text-xs text-zinc-600 dark:text-zinc-300">
+                                {entry.lead.rawLine}
+                              </p>
+                            ) : null}
                         </div>
                       ))}
                     </div>

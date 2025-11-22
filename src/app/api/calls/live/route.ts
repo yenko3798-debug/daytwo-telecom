@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
-import { CallStatus, Prisma } from "@prisma/client";
+import { CallStatus, Prisma, VoicemailStatus } from "@prisma/client";
 
 function rawLineFromMetadata(metadata: Prisma.JsonValue | null) {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) return null;
@@ -22,6 +22,7 @@ export async function GET(req: Request) {
   const q = url.searchParams.get("q")?.trim();
   const dtmfOnly = url.searchParams.get("dtmfOnly") === "true";
   const dtmfDigit = url.searchParams.get("dtmf")?.trim();
+  const voicemail = url.searchParams.get("voicemail")?.trim();
 
   const where: Prisma.CallSessionWhereInput = {
     campaign: {
@@ -40,6 +41,9 @@ export async function GET(req: Request) {
   } else if (dtmfOnly) {
     where.dtmf = { not: null };
   }
+  if (voicemail && voicemail.toUpperCase() in VoicemailStatus) {
+    where.voicemailStatus = voicemail.toUpperCase() as VoicemailStatus;
+  }
   if (q) {
     where.OR = [
       { id: { contains: q, mode: "insensitive" } },
@@ -53,40 +57,41 @@ export async function GET(req: Request) {
     ];
   }
 
-  const calls = await prisma.callSession.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-    take: limit,
-    include: {
-      campaign: { select: { id: true, name: true } },
-      lead: {
-        select: {
-          phoneNumber: true,
-          normalizedNumber: true,
-          metadata: true,
+    const calls = await prisma.callSession.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      take: limit,
+      include: {
+        campaign: { select: { id: true, name: true } },
+        lead: {
+          select: {
+            phoneNumber: true,
+            normalizedNumber: true,
+            metadata: true,
+          },
         },
       },
-    },
-  });
+    });
 
-  return NextResponse.json({
-    calls: calls.map((call) => ({
-      id: call.id,
-      status: call.status.toLowerCase(),
-      callerId: call.callerId,
-      dialedNumber: call.dialedNumber,
-      durationSeconds: call.durationSeconds,
-      costCents: call.costCents,
-      dtmf: call.dtmf,
-      createdAt: call.createdAt,
-      campaign: call.campaign,
-      lead: call.lead
-        ? {
-            phoneNumber: call.lead.phoneNumber,
-            normalizedNumber: call.lead.normalizedNumber,
-            rawLine: rawLineFromMetadata(call.lead.metadata),
-          }
-        : null,
-    })),
-  });
+    return NextResponse.json({
+      calls: calls.map((call) => ({
+        id: call.id,
+        status: call.status.toLowerCase(),
+        callerId: call.callerId,
+        dialedNumber: call.dialedNumber,
+        durationSeconds: call.durationSeconds,
+        costCents: call.costCents,
+        dtmf: call.dtmf,
+        createdAt: call.createdAt,
+        voicemailStatus: call.voicemailStatus.toLowerCase(),
+        campaign: call.campaign,
+        lead: call.lead
+          ? {
+              phoneNumber: call.lead.phoneNumber,
+              normalizedNumber: call.lead.normalizedNumber,
+              rawLine: rawLineFromMetadata(call.lead.metadata),
+            }
+          : null,
+      })),
+    });
 }

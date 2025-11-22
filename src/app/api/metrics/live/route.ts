@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import dayjs from "dayjs";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth";
-import { CampaignStatus, CallStatus } from "@prisma/client";
+import { CampaignStatus, CallStatus, VoicemailStatus } from "@prisma/client";
 
 function maskNumber(value: string | null, enabled: boolean) {
   if (!value) return null;
@@ -41,19 +41,20 @@ export async function GET(req: Request) {
   const campaignWhere = userId ? { userId } : undefined;
   const callWhere = userId ? { campaign: { userId } } : undefined;
 
-  const [
-    campaignStats,
-    callTotal,
-    callAnswered,
-    callFailed,
-    callDtmf,
-    callCost,
-    activeCalls,
-    cpsWindowCount,
-    leadTotals,
-    dtmfSamples,
-    feed,
-  ] = await Promise.all([
+    const [
+      campaignStats,
+      callTotal,
+      callAnswered,
+      callFailed,
+      callDtmf,
+      callCost,
+      callVoicemail,
+      activeCalls,
+      cpsWindowCount,
+      leadTotals,
+      dtmfSamples,
+      feed,
+    ] = await Promise.all([
     prisma.campaign.groupBy({
       by: ["status"],
       _count: { _all: true },
@@ -86,13 +87,20 @@ export async function GET(req: Request) {
         dtmf: { not: null },
       },
     }),
-    prisma.callSession.aggregate({
-      where: {
-        ...callWhere,
-        createdAt: { gte: since },
-      },
-      _sum: { costCents: true },
-    }),
+      prisma.callSession.aggregate({
+        where: {
+          ...callWhere,
+          createdAt: { gte: since },
+        },
+        _sum: { costCents: true },
+      }),
+      prisma.callSession.count({
+        where: {
+          ...callWhere,
+          voicemailStatus: { not: VoicemailStatus.UNKNOWN },
+          createdAt: { gte: since },
+        },
+      }),
     prisma.callSession.count({
       where: {
         ...callWhere,
@@ -173,6 +181,7 @@ export async function GET(req: Request) {
       durationSeconds: call.durationSeconds,
       costCents: call.costCents,
       createdAt: call.createdAt,
+        voicemailStatus: call.voicemailStatus.toLowerCase(),
       campaign: call.campaign,
       lead: {
         phoneNumber: maskNumber(call.lead?.phoneNumber ?? null, shouldMask),
@@ -192,6 +201,7 @@ export async function GET(req: Request) {
       answered: callAnswered,
       failed: callFailed,
       dtmf: callDtmf,
+        voicemail: callVoicemail,
       costCents: callCost._sum.costCents ?? 0,
     },
     leads: {

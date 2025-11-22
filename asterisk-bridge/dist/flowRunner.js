@@ -88,11 +88,30 @@ async function convertWavToUlaw(input, output) {
     await fs.rename(tmp, output);
     return output;
 }
+const ensuredDirs = new Set();
+async function ensureDirExists(dir) {
+    if (ensuredDirs.has(dir))
+        return;
+    await fs.mkdir(dir, { recursive: true }).catch(() => { });
+    ensuredDirs.add(dir);
+}
+function resolveMediaBaseDir() {
+    const prefix = normalizePrefix(config.soundPrefix);
+    if (prefix) {
+        const target = join(config.soundsRoot, prefix.replace(/\/$/, ""));
+        return target;
+    }
+    return join(config.soundsRoot, "bridge-cache");
+}
 async function ensureNormalizedVariants(file) {
-    const base = file.replace(/\.[^/.]+$/, "");
+    const baseDir = resolveMediaBaseDir();
+    await ensureDirExists(baseDir);
+    const key = hashKey(file);
+    const base = join(baseDir, key);
     const wavPath = `${base}.wav`;
     const ulawPath = `${base}.ulaw`;
-    if (!(await fileExists(wavPath))) {
+    const needsNormalize = !(await fileExists(wavPath)) || file.toLowerCase().endsWith(".wav");
+    if (needsNormalize) {
         await normalizeToWav(file, wavPath);
     }
     if (!(await fileExists(ulawPath))) {
@@ -115,9 +134,18 @@ async function ensureMedia(playback) {
     if (relativePath.startsWith("..")) {
         throw new Error("Media files must be inside ASTERISK_SOUNDS_ROOT");
     }
-    const sanitizedPath = relativePath.replace(/^\/+/, "");
+    let sanitizedPath = relativePath.replace(/^\/+/, "");
     const prefix = normalizePrefix(config.soundPrefix);
-    const needsPrefix = prefix.length > 0 && sanitizedPath.startsWith(prefix) ? sanitizedPath : `${prefix}${sanitizedPath}`;
+    if (prefix.length > 0) {
+        const prefixBase = prefix.replace(/\/$/, "");
+        const duplicateSegment = `${prefixBase}/${prefixBase}/`;
+        while (sanitizedPath.startsWith(duplicateSegment)) {
+            sanitizedPath = sanitizedPath.slice(prefixBase.length + 1);
+        }
+    }
+    const needsPrefix = prefix.length > 0 && sanitizedPath.startsWith(prefix)
+        ? sanitizedPath
+        : `${prefix}${sanitizedPath}`;
     return `sound:${needsPrefix}`;
 }
 const playbackMediaCache = new Map();
@@ -196,6 +224,154 @@ async function notifyPanel(event, body) {
         console.error(`Webhook ${event} error: ${error?.message ?? error}`);
     }
 }
+function extractVoicemailConfig(source) {
+    if (!source || typeof source !== "object" || Array.isArray(source))
+        return null;
+    const raw = source.voicemail;
+    if (!raw || typeof raw !== "object" || Array.isArray(raw))
+        return null;
+    if (!raw.enabled)
+        return null;
+    const retryLimit = Number.isFinite(raw.retryLimit) ? Math.max(0, Number(raw.retryLimit)) : 0;
+    const attempt = Number.isFinite(raw.attempt) ? Math.max(0, Number(raw.attempt)) : 0;
+    return {
+        enabled: true,
+        retryLimit,
+        attempt,
+        hangupOnMachine: raw.hangupOnMachine !== false,
+        assumeHumanOnTimeout: raw.assumeHumanOnTimeout !== false,
+    };
+}
+function clearVoicemailTimer(state) {
+    if (state.voicemail?.detectionTimer) {
+        clearTimeout(state.voicemail.detectionTimer);
+        state.voicemail.detectionTimer = undefined;
+    }
+}
+function resolveVoicemailListeners(state, status) {
+    if (!state.voicemail)
+        return;
+    const listeners = state.voicemail.listeners ?? [];
+    state.voicemail.listeners = [];
+    for (const listener of listeners) {
+        try {
+            listener(status);
+        }
+        catch (error) {
+            console.error(`Voicemail listener error: ${error instanceof Error ? error.message : String(error)}`);
+        }
+    }
+}
+function waitForVoicemailResult(state) {
+    if (!state.voicemail)
+        return Promise.resolve("unknown");
+    if (state.voicemail.decided) {
+        return Promise.resolve(state.voicemail.status);
+    }
+    return new Promise((resolve) => {
+        state.voicemail?.listeners.push(resolve);
+    });
+}
+function armVoicemailTimer(state) {
+    if (!state.voicemail || state.voicemail.decided)
+        return;
+    clearVoicemailTimer(state);
+    const timeout = setTimeout(() => {
+        if (!state.voicemail || state.voicemail.decided)
+            return;
+        if (state.voicemail.config.assumeHumanOnTimeout) {
+            finalizeVoicemailHuman(state);
+        }
+        else {
+            triggerVoicemail(state, { reason: "timeout" }).catch((error) => {
+                console.error(`Voicemail trigger error: ${error?.message ?? error}`);
+            });
+        }
+    }, config.voicemailDetection.detectionTimeoutMs);
+    state.voicemail.detectionTimer = timeout;
+}
+function finalizeVoicemailHuman(state) {
+    if (!state.voicemail || state.voicemail.decided)
+        return;
+    clearVoicemailTimer(state);
+    state.voicemail.decided = true;
+    state.voicemail.status = "human";
+    resolveVoicemailListeners(state, "human");
+}
+async function triggerVoicemail(state, metrics) {
+    if (!state.voicemail || state.voicemail.decided)
+        return;
+    clearVoicemailTimer(state);
+    state.voicemail.decided = true;
+    state.voicemail.status = "machine";
+    const attempt = state.voicemail.config.attempt ?? 0;
+    const retryEligible = attempt < state.voicemail.config.retryLimit;
+    state.voicemail.config.attempt = attempt + 1;
+    resolveVoicemailListeners(state, "machine");
+    try {
+        await notifyPanel("call.voicemail", {
+            sessionId: state.sessionId,
+            channelId: state.channelId,
+            metadata: {
+                detection: metrics,
+                retryEligible,
+            },
+        });
+    }
+    catch (error) {
+        console.error(`Voicemail notify failed: ${error?.message ?? error}`);
+    }
+    if (state.voicemail.config.hangupOnMachine === false) {
+        return;
+    }
+    state.completed = true;
+    state.completionSent = true;
+    try {
+        await new Promise((resolve) => {
+            state.channel.hangup({}, () => resolve());
+        });
+    }
+    catch { }
+}
+function handleTalkingEvent(event, started) {
+    const state = sessionsByChannel.get(event.channel.id);
+    if (!state || !state.voicemail || state.voicemail.decided)
+        return;
+    const cfg = config.voicemailDetection;
+    const now = Date.now();
+    if (!state.answeredAt) {
+        state.answeredAt = now;
+    }
+    if (started) {
+        const silenceMs = now - (state.answeredAt ?? state.startedAt);
+        if (state.voicemail.firstSilenceMs === undefined) {
+            state.voicemail.firstSilenceMs = silenceMs;
+        }
+        if (silenceMs >= cfg.maxSilenceBeforeSpeechMs) {
+            triggerVoicemail(state, { reason: "silence", silenceMs }).catch((error) => {
+                console.error(`Voicemail trigger error: ${error?.message ?? error}`);
+            });
+            return;
+        }
+        state.voicemail.speechStart = now;
+        return;
+    }
+    if (!state.voicemail.speechStart)
+        return;
+    const speechMs = now - state.voicemail.speechStart;
+    state.voicemail.speechStart = undefined;
+    if (state.voicemail.firstSpeechMs === undefined) {
+        state.voicemail.firstSpeechMs = speechMs;
+    }
+    if (speechMs >= cfg.machineSpeechMinMs) {
+        triggerVoicemail(state, { reason: "longGreeting", speechMs }).catch((error) => {
+            console.error(`Voicemail trigger error: ${error?.message ?? error}`);
+        });
+    }
+    else if (speechMs <= cfg.humanSpeechMaxMs) {
+        finalizeVoicemailHuman(state);
+    }
+}
 async function fetchSession(sessionId) {
     const response = await fetch(`${config.panelBaseUrl}/api/ari/sessions/${sessionId}`, {
         headers: {
@@ -236,6 +412,12 @@ function createSessionState(payload, channel) {
     if (!nodeMap.has(flow.entry)) {
         throw new Error(`Flow entry node ${flow.entry} missing`);
     }
+    const sessionMeta = payload.session.metadata && typeof payload.session.metadata === "object" && !Array.isArray(payload.session.metadata)
+        ? payload.session.metadata
+        : null;
+    const campaignMeta = payload.campaign.metadata && typeof payload.campaign.metadata === "object" && !Array.isArray(payload.campaign.metadata)
+        ? payload.campaign.metadata
+        : null;
     const state = {
         sessionId: payload.session.id,
         channelId: channel.id,
@@ -249,6 +431,32 @@ function createSessionState(payload, channel) {
         completed: false,
         completionSent: false,
     };
+    const hasActivityNode = flow.nodes.some((node) => node.type === "activity");
+    let voicemailConfig = extractVoicemailConfig(sessionMeta) ?? extractVoicemailConfig(campaignMeta);
+    if (!voicemailConfig && hasActivityNode) {
+        voicemailConfig = {
+            enabled: true,
+            retryLimit: 0,
+            attempt: 0,
+            hangupOnMachine: false,
+            assumeHumanOnTimeout: false,
+        };
+    }
+    else if (voicemailConfig && hasActivityNode) {
+        voicemailConfig = {
+            ...voicemailConfig,
+            hangupOnMachine: false,
+            assumeHumanOnTimeout: false,
+        };
+    }
+    if (voicemailConfig) {
+        state.voicemail = {
+            config: voicemailConfig,
+            status: "unknown",
+            decided: false,
+            listeners: [],
+        };
+    }
     return state;
 }
 async function handleGather(state, node) {
@@ -297,6 +505,50 @@ async function handleGather(state, node) {
         attempt += 1;
     }
     return node.defaultNext ?? null;
+}
+async function handleActivity(state, node) {
+    if (!state.voicemail) {
+        state.voicemail = {
+            config: {
+                enabled: true,
+                retryLimit: 0,
+                attempt: 0,
+                hangupOnMachine: false,
+                assumeHumanOnTimeout: false,
+            },
+            status: "unknown",
+            decided: false,
+            listeners: [],
+        };
+    }
+    else {
+        state.voicemail.config.hangupOnMachine = false;
+        state.voicemail.config.assumeHumanOnTimeout = false;
+        if (!state.voicemail.listeners) {
+            state.voicemail.listeners = [];
+        }
+    }
+    if (!state.voicemail.decided) {
+        armVoicemailTimer(state);
+    }
+    const result = await waitForVoicemailResult(state);
+    if (result === "human") {
+        const digit = (node.humanDigit ?? "1").charAt(0);
+        if (digit) {
+            state.variables[`activity:${node.id}`] = digit;
+            state.digits += digit;
+            const aggregateDigits = state.digits;
+            notifyPanel("call.dtmf", {
+                sessionId: state.sessionId,
+                channelId: state.channelId,
+                dtmf: aggregateDigits,
+                digits: digit,
+                variable: `activity:${node.id}`,
+            });
+        }
+        return node.next ?? node.defaultNext ?? null;
+    }
+    return node.defaultNext ?? node.next ?? null;
 }
 async function handleDial(state, node) {
     const bridgeId = newId("bridge");
@@ -400,6 +652,10 @@ async function runFlow(state) {
                 });
                 break;
             }
+            case "activity": {
+                current = await handleActivity(state, node);
+                break;
+            }
             case "dial": {
                 current = await handleDial(state, node);
                 break;
@@ -467,6 +723,10 @@ async function handleSessionStart(event, channel) {
                 resolve();
         });
     });
+    state.answeredAt = Date.now();
+    if (state.voicemail) {
+        armVoicemailTimer(state);
+    }
     await notifyPanel("call.answered", {
         sessionId: state.sessionId,
         channelId: channel.id,
@@ -508,6 +768,7 @@ async function handleStasisEnd(event) {
         }
         return;
     }
+    clearVoicemailTimer(state);
     sessionsByChannel.delete(event.channel.id);
     if (!state.completionSent) {
         state.completionSent = true;
@@ -556,6 +817,22 @@ export async function startFlowRunner() {
         }
         catch (error) {
             console.error(`DTMF handler error: ${error?.message ?? error}`);
+        }
+    });
+    client.on("ChannelTalkingStarted", (event) => {
+        try {
+            handleTalkingEvent(event, true);
+        }
+        catch (error) {
+            console.error(`TalkingStarted error: ${error?.message ?? error}`);
+        }
+    });
+    client.on("ChannelTalkingFinished", (event) => {
+        try {
+            handleTalkingEvent(event, false);
+        }
+        catch (error) {
+            console.error(`TalkingFinished error: ${error?.message ?? error}`);
         }
     });
     client.start(config.ariApplication);

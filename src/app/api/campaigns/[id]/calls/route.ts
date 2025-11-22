@@ -19,14 +19,16 @@ function rawLineFromMetadata(metadata: Prisma.JsonValue | null) {
 
 export async function GET(
   req: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const session = await getSession();
   if (!session) return unauthorized();
   const isAdmin = ensureAdmin(session.role);
 
+  const { id } = await params;
+
   const campaign = await prisma.campaign.findUnique({
-    where: { id: params.id },
+    where: { id },
     select: { id: true, userId: true },
   });
   if (!campaign) return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -42,7 +44,7 @@ export async function GET(
   const dtmfOnly = url.searchParams.get("dtmfOnly") === "true";
   const dtmfDigit = url.searchParams.get("dtmf")?.trim();
 
-  const where: Prisma.CallSessionWhereInput = { campaignId: params.id };
+  const where: Prisma.CallSessionWhereInput = { campaignId: id };
   if (status && status.toUpperCase() in CallStatus) {
     where.status = status.toUpperCase() as CallStatus;
   }
@@ -94,26 +96,27 @@ export async function GET(
   const hasMore = calls.length > limit;
   const items = hasMore ? calls.slice(0, -1) : calls;
 
-  return NextResponse.json({
-    calls: items.map((call) => ({
-      id: call.id,
-      status: call.status.toLowerCase(),
-      callerId: call.callerId,
-      dialedNumber: call.dialedNumber,
-      durationSeconds: call.durationSeconds,
-      costCents: call.costCents,
-      dtmf: call.dtmf,
-      createdAt: call.createdAt,
-      metadata: call.metadata,
-      campaign: call.campaign,
-      lead: call.lead
-        ? {
-            phoneNumber: call.lead.phoneNumber,
-            normalizedNumber: call.lead.normalizedNumber,
-            rawLine: rawLineFromMetadata(call.lead.metadata),
-          }
-        : null,
-    })),
-    nextCursor: hasMore ? items[items.length - 1]?.id : null,
-  });
+    return NextResponse.json({
+      calls: items.map((call) => ({
+        id: call.id,
+        status: call.status.toLowerCase(),
+        callerId: call.callerId,
+        dialedNumber: call.dialedNumber,
+        durationSeconds: call.durationSeconds,
+        costCents: call.costCents,
+        dtmf: call.dtmf,
+        voicemailStatus: call.voicemailStatus.toLowerCase(),
+        createdAt: call.createdAt,
+        metadata: call.metadata,
+        campaign: call.campaign,
+        lead: call.lead
+          ? {
+              phoneNumber: call.lead.phoneNumber,
+              normalizedNumber: call.lead.normalizedNumber,
+              rawLine: rawLineFromMetadata(call.lead.metadata),
+            }
+          : null,
+      })),
+      nextCursor: hasMore ? items[items.length - 1]?.id : null,
+    });
 }
