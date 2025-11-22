@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState, useDeferredValue } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { findPhoneNumbersInText, type CountryCode } from "libphonenumber-js";
 import { PageFrame, MotionCard, ShimmerTile } from "@/components/ui/LuxuryPrimitives";
@@ -185,7 +185,8 @@ export default function StartCampaignPage() {
     const [description, setDescription] = useState("");
 
     const [rawLeadText, setRawLeadText] = useState("");
-    const [leads, setLeads] = useState<ParsedLead[]>([]);
+    const deferredLeadText = useDeferredValue(rawLeadText);
+    const leads = useMemo(() => extractPhones(deferredLeadText), [deferredLeadText]);
     const [campaign, setCampaign] = useState<CampaignState | null>(null);
     const [creating, setCreating] = useState(false);
     const [uploading, setUploading] = useState(false);
@@ -262,11 +263,6 @@ export default function StartCampaignPage() {
       return () => controller.abort();
     }, [loadOptions]);
 
-  useEffect(() => {
-    const parsed = extractPhones(rawLeadText);
-    setLeads(parsed);
-  }, [rawLeadText]);
-
     useEffect(() => {
       if (!campaign?.id) {
         setDtmfFeed([]);
@@ -303,13 +299,13 @@ export default function StartCampaignPage() {
       };
     }, [campaign?.id]);
 
-  const handleFile = useCallback((file: File) => {
+    const handleFile = useCallback((file: File) => {
     const reader = new FileReader();
     reader.onload = () => {
       const text = String(reader.result || "");
       setRawLeadText(text);
-      const parsed = extractPhones(text);
-      push(`Parsed ${parsed.length} leads`, "success");
+        const parsed = extractPhones(text);
+        push(`Parsed ${parsed.length} leads`, "success");
     };
     reader.readAsText(file);
   }, [push]);
@@ -461,7 +457,6 @@ export default function StartCampaignPage() {
     setCampaign(null);
     setLeadUploadResult(0);
       setSkippedLines(0);
-    setLeads([]);
     setRawLeadText("");
       setAmdEnabled(false);
       setVoicemailRetryLimit(0);
