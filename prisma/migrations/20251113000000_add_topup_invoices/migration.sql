@@ -14,6 +14,7 @@ CREATE TABLE "TopUpInvoice" (
     "nowpayInvoice" JSONB,
     "lastIpn" JSONB,
     "settledAt" TIMESTAMP(3),
+    "balanceAdjustmentId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
     CONSTRAINT "TopUpInvoice_pkey" PRIMARY KEY ("id")
@@ -26,4 +27,7 @@ CREATE INDEX "TopUpInvoice_userId_idx" ON "TopUpInvoice"("userId");
 CREATE INDEX "TopUpInvoice_status_idx" ON "TopUpInvoice"("status");
 
 -- AddForeignKey
-ALTER TABLE "TopUpInvoice" ADD CONSTRAINT "TopUpInvoice_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "TopUpInvoice"
+  ADD CONSTRAINT "TopUpInvoice_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "TopUpInvoice"
+  ADD CONSTRAINT "TopUpInvoice_balanceAdjustmentId_fkey" FOREIGN KEY ("balanceAdjustmentId") REFERENCES "BalanceAdjustment"("id") ON DELETE SET NULL ON UPDATE CASCADE;
