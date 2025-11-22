@@ -1,6 +1,6 @@
 import AriClient from "ari-client";
 import { promises as fs } from "fs";
-import { join, relative, basename } from "path";
+import { join, relative } from "path";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { config } from "./config.js";
@@ -88,10 +88,26 @@ async function convertWavToUlaw(input, output) {
     await fs.rename(tmp, output);
     return output;
 }
+const ensuredDirs = new Set();
+async function ensureDirExists(dir) {
+    if (ensuredDirs.has(dir))
+        return;
+    await fs.mkdir(dir, { recursive: true }).catch(() => { });
+    ensuredDirs.add(dir);
+}
+function resolveMediaBaseDir() {
+    const prefix = normalizePrefix(config.soundPrefix);
+    if (prefix) {
+        const target = join(config.soundsRoot, prefix.replace(/\/$/, ""));
+        return target;
+    }
+    return config.soundsDir;
+}
 async function ensureNormalizedVariants(file) {
-    const fileName = basename(file);
-    const key = fileName.replace(/\.[^/.]+$/, "") || hashKey(file);
-    const base = join(config.soundsDir, key);
+    const baseDir = resolveMediaBaseDir();
+    await ensureDirExists(baseDir);
+    const key = hashKey(file);
+    const base = join(baseDir, key);
     const wavPath = `${base}.wav`;
     const ulawPath = `${base}.ulaw`;
     const needsNormalize = !(await fileExists(wavPath)) || file.toLowerCase().endsWith(".wav");
