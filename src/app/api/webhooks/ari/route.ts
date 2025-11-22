@@ -1,20 +1,8 @@
 import { NextResponse } from "next/server";
-import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { completeCallSession } from "@/lib/campaignRunner";
 import { CallStatus, LeadStatus, VoicemailStatus } from "@prisma/client";
 import { sendDtmfWebhooks } from "@/lib/webhooks";
-
-const payloadSchema = z.object({
-  event: z.string(),
-  sessionId: z.string().optional(),
-  channelId: z.string().optional(),
-  dtmf: z.string().optional(),
-  durationSeconds: z.number().int().min(0).optional(),
-  recordingUrl: z.string().optional(),
-  costCents: z.number().int().min(0).optional(),
-  metadata: z.record(z.any()).optional(),
-});
 
 const statusMap: Record<string, CallStatus> = {
   "call.answered": CallStatus.ANSWERED,
@@ -26,15 +14,54 @@ const statusMap: Record<string, CallStatus> = {
 const dtmfEvents = new Set(["call.dtmf"]);
 const voicemailEvents = new Set(["call.voicemail"]);
 
+type Payload = {
+  event: string;
+  sessionId?: string;
+  channelId?: string;
+  dtmf?: string;
+  durationSeconds?: number;
+  recordingUrl?: string;
+  costCents?: number;
+  metadata?: Record<string, any>;
+};
+
+function parsePayload(raw: unknown): Payload {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error("Payload must be an object");
+  }
+  const value = raw as Record<string, any>;
+  if (typeof value.event !== "string" || value.event.length === 0) {
+    throw new Error("event is required");
+  }
+  const payload: Payload = { event: value.event };
+  if (typeof value.sessionId === "string" && value.sessionId.length > 0) {
+    payload.sessionId = value.sessionId;
+  }
+  if (typeof value.channelId === "string" && value.channelId.length > 0) {
+    payload.channelId = value.channelId;
+  }
+  if (typeof value.dtmf === "string") {
+    payload.dtmf = value.dtmf;
+  }
+  if (typeof value.durationSeconds === "number" && Number.isFinite(value.durationSeconds) && value.durationSeconds >= 0) {
+    payload.durationSeconds = value.durationSeconds;
+  }
+  if (typeof value.recordingUrl === "string" && value.recordingUrl.length > 0) {
+    payload.recordingUrl = value.recordingUrl;
+  }
+  if (typeof value.costCents === "number" && Number.isFinite(value.costCents) && value.costCents >= 0) {
+    payload.costCents = value.costCents;
+  }
+  if (value.metadata && typeof value.metadata === "object" && !Array.isArray(value.metadata)) {
+    payload.metadata = value.metadata as Record<string, any>;
+  }
+  return payload;
+}
+
 export async function POST(req: Request) {
   try {
     const raw = await req.json().catch(() => null);
-    const parsed = payloadSchema.safeParse(raw ?? {});
-    if (!parsed.success) {
-      const message = parsed.error.issues?.[0]?.message ?? "Invalid payload";
-      return NextResponse.json({ error: message }, { status: 400 });
-    }
-    const body = parsed.data;
+    const body = parsePayload(raw);
 
       const status = statusMap[body.event];
       const isDtmfEvent = dtmfEvents.has(body.event);
