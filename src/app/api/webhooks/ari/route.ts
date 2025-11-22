@@ -28,8 +28,13 @@ const voicemailEvents = new Set(["call.voicemail"]);
 
 export async function POST(req: Request) {
   try {
-    const raw = await req.json();
-    const body = payloadSchema.parse(raw);
+    const raw = await req.json().catch(() => null);
+    const parsed = payloadSchema.safeParse(raw ?? {});
+    if (!parsed.success) {
+      const message = parsed.error.issues?.[0]?.message ?? "Invalid payload";
+      return NextResponse.json({ error: message }, { status: 400 });
+    }
+    const body = parsed.data;
 
       const status = statusMap[body.event];
       const isDtmfEvent = dtmfEvents.has(body.event);
