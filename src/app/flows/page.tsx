@@ -177,20 +177,26 @@ function findNode(definition: FlowDefinition, id: string) {
 }
 
 function sanitizeDefinition(definition: FlowDefinition, removedId: string): FlowDefinition {
-  const nodes = definition.nodes.map((node) => {
-    if (node.id === removedId) return node;
-    const nextNode =
-      "next" in node && node.next === removedId
-        ? { ...node, next: undefined }
-        : node;
-    if (nextNode.type !== "gather") return nextNode;
-    const branches = { ...nextNode.branches };
-    Object.entries(branches).forEach(([digit, target]) => {
-      if (target === removedId) delete branches[digit];
+    const nodes = definition.nodes.map((node) => {
+      if (node.id === removedId) return node;
+      const nextNode =
+        "next" in node && node.next === removedId
+          ? { ...node, next: undefined }
+          : node;
+      if (nextNode.type === "gather") {
+        const branches = { ...nextNode.branches };
+        Object.entries(branches).forEach(([digit, target]) => {
+          if (target === removedId) delete branches[digit];
+        });
+        const defaultNext = nextNode.defaultNext === removedId ? undefined : nextNode.defaultNext;
+        return { ...nextNode, branches, defaultNext };
+      }
+      if (nextNode.type === "activity") {
+        const defaultNext = nextNode.defaultNext === removedId ? undefined : nextNode.defaultNext;
+        return { ...nextNode, defaultNext };
+      }
+      return nextNode;
     });
-    const defaultNext = nextNode.defaultNext === removedId ? undefined : nextNode.defaultNext;
-    return { ...nextNode, branches, defaultNext };
-  });
   const filtered = nodes.filter((node) => node.id !== removedId);
   const entry = definition.entry === removedId ? filtered[0]?.id ?? "" : definition.entry;
   return { ...definition, entry, nodes: filtered };
@@ -202,6 +208,7 @@ function getNodeLabel(node: FlowNode) {
   if (node.type === "gather") return "Gather digits";
   if (node.type === "dial") return "Dial";
   if (node.type === "pause") return "Pause";
+  if (node.type === "activity") return "Activity check";
   return "Hang up";
 }
 
@@ -225,6 +232,7 @@ type NodeType = FlowNode["type"];
 const NODE_TYPES: Array<{ type: NodeType; label: string; description: string }> = [
   { type: "play", label: "Play", description: "Speak text or play an audio file" },
   { type: "gather", label: "Gather", description: "Collect DTMF input from the caller" },
+  { type: "activity", label: "Activity check", description: "Detect a live person before hanging up" },
   { type: "dial", label: "Dial", description: "Forward the call to another endpoint" },
   { type: "pause", label: "Pause", description: "Wait for a few seconds" },
   { type: "hangup", label: "Hangup", description: "Terminate the call" },
@@ -255,7 +263,7 @@ function createNode(type: NodeType): FlowNode {
       defaultNext: undefined,
     };
   }
-  if (type === "dial") {
+    if (type === "dial") {
     return {
       id,
       name: "Dial",
@@ -265,6 +273,16 @@ function createNode(type: NodeType): FlowNode {
       next: undefined,
     };
   }
+    if (type === "activity") {
+      return {
+        id,
+        name: "Activity check",
+        type,
+        humanDigit: "1",
+        next: undefined,
+        defaultNext: undefined,
+      };
+    }
   if (type === "pause") {
     return {
       id,
@@ -1191,6 +1209,40 @@ function renderNodeFields({ node, updateNode, uploadAudio }: NodeFieldProps) {
       </div>
     );
   }
+    if (node.type === "activity") {
+      return (
+        <div className="space-y-4 text-sm text-zinc-600 dark:text-zinc-300">
+          <p>
+            Activity Check listens for live audio right after the call connects. If a human is detected it logs a DTMF digit before
+            moving to the next step. If no human is detected it follows the default path without logging a digit.
+          </p>
+          <div>
+            <label className="text-xs font-medium text-zinc-500 dark:text-zinc-400">
+              Digit to emit on human detection
+            </label>
+            <input
+              value={node.humanDigit ?? "1"}
+              maxLength={1}
+              onChange={(event) => {
+                const value = event.target.value.trim();
+                if (!value) {
+                  updateNode(node.id, (prev) => ({ ...prev, humanDigit: "1" }));
+                  return;
+                }
+                if (/^[0-9*#]$/.test(value)) {
+                  updateNode(node.id, (prev) => ({ ...prev, humanDigit: value }));
+                }
+              }}
+              className="mt-1 w-24 rounded-xl border border-white/60 bg-white/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40 dark:border-white/10 dark:bg-white/5 dark:text-white"
+            />
+          </div>
+          <div className="rounded-2xl border border-white/60 bg-white/60 p-4 text-xs text-zinc-500 dark:border-white/10 dark:bg-white/5 dark:text-zinc-400">
+            Follow this step with a Hangup node. Use the &ldquo;Next step&rdquo; target for human answers and the default target for
+            machines or silence.
+          </div>
+        </div>
+      );
+    }
   if (node.type === "dial") {
     return (
       <div className="space-y-4">

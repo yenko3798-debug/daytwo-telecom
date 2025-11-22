@@ -22,17 +22,19 @@ function ensureAdmin(role: string | undefined) {
 
 export async function POST(
   req: Request,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   if (!ensureAdmin(session.role)) return forbidden();
 
+  const { id } = await context.params;
+
   try {
     const body = bodySchema.parse(await req.json());
     const result = await prisma.$transaction(async (tx) => {
       const user = await tx.user.findUnique({
-        where: { id: params.id },
+        where: { id },
         select: { id: true, balanceCents: true },
       });
       if (!user) {

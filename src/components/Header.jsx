@@ -19,6 +19,7 @@ const baseNavItems = [
   { href: '/campaigns', label: 'Campaigns' },
   { href: '/flows', label: 'Flows' },
   { href: '/topup', label: 'Top Up' },
+  { href: '/settings', label: 'Settings' },
   { href: '/status', label: 'Status' },
   { href: '/pricing', label: 'Pricing' },
 ]

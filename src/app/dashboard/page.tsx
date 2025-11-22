@@ -98,7 +98,7 @@ export default function StartPage() {
             }
             actions={actions}
         >
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
                 <DashboardStat
                     title="Answered (ASR)"
                     value={`${answered.toLocaleString()} • ${asr}%`}
@@ -115,6 +115,12 @@ export default function StartPage() {
                 >
                     <Spark data={sparkB} className="h-8 w-full" />
                 </DashboardStat>
+              <DashboardStat
+                title="Voicemail flagged"
+                value={metrics?.calls.voicemail?.toLocaleString() ?? "0"}
+                loading={loading}
+                tone="rose"
+              />
                 <DashboardStat title="Current CPS" value={cps.toFixed(2)} loading={loading} />
                 <DashboardStat title="Total spend" value={`$${spend}`} loading={loading} tone="amber" />
             </div>
@@ -150,9 +156,9 @@ export default function StartPage() {
                         </div>
                     )}
                     <MotionCard tone="neutral" className="p-5">
-                        <div className="mb-3 flex items-center justify-between">
+                          <div className="mb-3 flex items-center justify-between">
                             <div className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">Recent activity</div>
-                            <Link href="/campaigns/status" className="text-xs font-semibold text-emerald-600 transition hover:text-emerald-500 dark:text-emerald-400">
+                              <Link href="/campaigns" className="text-xs font-semibold text-emerald-600 transition hover:text-emerald-500 dark:text-emerald-400">
                                 Open feed
                             </Link>
                         </div>
@@ -171,6 +177,7 @@ export default function StartPage() {
                         <StatusPill label="Active campaigns" value={metrics?.campaigns.running ?? 0} />
                         <StatusPill label="Active calls" value={metrics?.activeCalls ?? 0} />
                         <StatusPill label="DTMF hits" value={dtmfCount} tone="amber" />
+                        <StatusPill label="Voicemail" value={metrics?.calls.voicemail ?? 0} tone="rose" />
                     </div>
                     <div className="grid grid-cols-2 gap-2">
                         <div className="rounded-2xl bg-black/30 p-3 ring-1 ring-emerald-400/20">
@@ -304,6 +311,9 @@ function ActivityList({ items, loading }: { items: LiveMetrics["feed"]; loading?
                             <span className="text-zinc-500">→</span>
                             <span className="text-zinc-700 dark:text-zinc-200">{r.dialedNumber ?? "—"}</span>
                             <StatusBadge value={r.status} />
+                                  {r.voicemailStatus && r.voicemailStatus !== "unknown" ? (
+                                    <VoicemailBadge value={r.voicemailStatus} />
+                                  ) : null}
                             {r.dtmf ? (
                                 <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 font-mono text-[11px] text-emerald-600 dark:text-emerald-300">
                                     DTMF {r.dtmf}
@@ -312,7 +322,11 @@ function ActivityList({ items, loading }: { items: LiveMetrics["feed"]; loading?
                         </div>
                         <div className="flex justify-between text-xs text-zinc-500 dark:text-zinc-400">
                             <span>{new Date(r.createdAt).toLocaleTimeString()} • {r.campaign.name}</span>
-                            {r.lead?.rawLine ? <span className="truncate text-right" title={r.lead.rawLine}>{r.lead.rawLine}</span> : null}
+                              {r.lead?.rawLine ? (
+                                <span className="max-w-xs whitespace-pre-wrap break-words text-right" title={r.lead.rawLine}>
+                                  {r.lead.rawLine}
+                                </span>
+                              ) : null}
                         </div>
                     </motion.div>
                 ))}
@@ -351,6 +365,30 @@ function StatusBadge({ value }: { value: string }) {
             {badge.label}
         </span>
     );
+}
+
+function VoicemailBadge({ value }: { value: string }) {
+  const map: Record<string, { label: string; cls: string }> = {
+    machine: {
+      label: "Machine",
+      cls: "bg-rose-500/15 text-rose-600 ring-rose-400/30 dark:bg-rose-500/15 dark:text-rose-300",
+    },
+    retrying: {
+      label: "Retrying",
+      cls: "bg-amber-500/15 text-amber-600 ring-amber-400/30 dark:bg-amber-500/15 dark:text-amber-300",
+    },
+    human: {
+      label: "Human",
+      cls: "bg-emerald-500/15 text-emerald-600 ring-emerald-400/30 dark:bg-emerald-500/15 dark:text-emerald-300",
+    },
+  };
+  const key = value?.toLowerCase?.() ?? "machine";
+  const badge = map[key] ?? map.machine;
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-semibold ring-1 ${badge.cls}`}>
+      {badge.label}
+    </span>
+  );
 }
 
 function buildSpark(feed: LiveMetrics["feed"] | undefined, mode: "duration" | "dtmf") {

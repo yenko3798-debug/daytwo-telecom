@@ -63,6 +63,18 @@ enum AdjustmentSource {
   REFUND           @map("refund")
 }
 
+enum WebhookChannelType {
+  DISCORD   @map("discord")
+  TELEGRAM  @map("telegram")
+}
+
+enum VoicemailStatus {
+  UNKNOWN  @map("unknown")
+  HUMAN    @map("human")
+  MACHINE  @map("machine")
+  RETRYING @map("retrying")
+}
+
 model User {
   id                     String                @id @default(cuid())
   email                  String                @unique
@@ -79,6 +91,7 @@ model User {
   adjustments            BalanceAdjustment[]   @relation("UserAdjustments")
   adjustmentsCreated     BalanceAdjustment[]   @relation("AdjustmentsCreatedBy")
   updatedSettings        SystemSetting[]       @relation("SettingUpdatedBy")
+  webhooks               WebhookEndpoint[]
 }
 
 model TopUpInvoice {
@@ -172,6 +185,8 @@ model Campaign {
   connectedCount      Int             @default(0)
   dtmfCount           Int             @default(0)
   costCents           Int             @default(0)
+  amdEnabled          Boolean         @default(false)
+  voicemailRetryLimit Int             @default(0)
   metadata            Json?
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
@@ -187,59 +202,67 @@ model Campaign {
 }
 
 model CampaignLead {
-  id                String       @id @default(cuid())
-  campaignId        String
-  phoneNumber       String
-  normalizedNumber  String
-  status            LeadStatus   @default(PENDING)
-  dtmf              String?
-  attempts          Int          @default(0)
-  lastDialedAt      DateTime?
-  metadata          Json?
-  error             String?
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
+  id               String       @id @default(cuid())
+  campaignId       String
+  phoneNumber      String
+  normalizedNumber String
+  status           LeadStatus   @default(PENDING)
+  dtmf             String?
+  attempts         Int          @default(0)
+  lastDialedAt     DateTime?
+  metadata         Json?
+  rawLineHash      String?      @db.Char(64)
+  error            String?
+  voicemailCount   Int          @default(0)
+  lastVoicemailAt  DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
 
-  campaign  Campaign     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  calls     CallSession[]
+  campaign Campaign     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  calls    CallSession[]
 
   @@index([campaignId])
   @@index([campaignId, status])
+  @@index([normalizedNumber])
+  @@index([rawLineHash])
   @@unique([campaignId, phoneNumber])
 }
 
 model CallSession {
-  id              String      @id @default(cuid())
+  id              String          @id @default(cuid())
   campaignId      String
   leadId          String
   routeId         String
   ariChannelId    String?
   externalId      String?
-  status          CallStatus  @default(CREATED)
+  status          CallStatus      @default(CREATED)
   callerId        String
   dialedNumber    String
-  requestedAt     DateTime    @default(now())
+  requestedAt     DateTime        @default(now())
   startedAt       DateTime?
   answeredAt      DateTime?
   completedAt     DateTime?
-  durationSeconds Int         @default(0)
-  costCents       Int         @default(0)
+  durationSeconds Int             @default(0)
+  costCents       Int             @default(0)
   dtmf            String?
   recordingUrl    String?
   metadata        Json?
   error           String?
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  voicemailStatus VoicemailStatus @default(UNKNOWN)
+  voicemailScore  Int?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
 
-  campaign  Campaign    @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  lead      CampaignLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  route     SipRoute    @relation(fields: [routeId], references: [id], onDelete: Restrict)
+  campaign Campaign     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  lead     CampaignLead @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  route    SipRoute     @relation(fields: [routeId], references: [id], onDelete: Restrict)
 
   @@index([campaignId])
   @@index([leadId])
   @@index([routeId])
   @@index([status])
   @@index([ariChannelId])
+  @@index([voicemailStatus])
 }
 
 model BalanceAdjustment {
@@ -270,4 +293,21 @@ model SystemSetting {
   updatedAt    DateTime @updatedAt
 
   updatedBy  User? @relation("SettingUpdatedBy", fields: [updatedById], references: [id])
+}
+
+model WebhookEndpoint {
+  id               String             @id @default(cuid())
+  userId           String
+  type             WebhookChannelType
+  label            String?
+  discordWebhook   String?
+  telegramBotToken String?
+  telegramChatId   String?
+  enabled          Boolean            @default(true)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, enabled])
 }

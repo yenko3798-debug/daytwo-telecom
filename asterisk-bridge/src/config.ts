@@ -31,6 +31,10 @@ function ensureDir(path: string) {
 const httpPort = Number.parseInt(optionalEnv("HTTP_PORT") ?? "4000", 10);
 const ringTimeout = Number.parseInt(optionalEnv("DEFAULT_RING_TIMEOUT") ?? "45", 10);
 const dialTimeout = Number.parseInt(optionalEnv("DEFAULT_DIAL_TIMEOUT") ?? "30", 10);
+const amdHumanSpeechMax = Number.parseInt(optionalEnv("AMD_HUMAN_SPEECH_MAX_MS") ?? "1200", 10);
+const amdMachineSpeechMin = Number.parseInt(optionalEnv("AMD_MACHINE_SPEECH_MIN_MS") ?? "2200", 10);
+const amdMaxSilence = Number.parseInt(optionalEnv("AMD_MAX_SILENCE_MS") ?? "2500", 10);
+const amdDetectionTimeout = Number.parseInt(optionalEnv("AMD_DETECTION_TIMEOUT_MS") ?? "6000", 10);
 
 const panelBaseUrl = requireEnv("PANEL_BASE_URL").replace(/\/$/, "");
 const panelWebhookUrl = requireEnv("PANEL_WEBHOOK_URL");
@@ -69,4 +73,10 @@ export const config = {
   ringTimeout,
   dialTimeout,
   logLevel: optionalEnv("LOG_LEVEL") ?? "info",
+  voicemailDetection: {
+    humanSpeechMaxMs: amdHumanSpeechMax,
+    machineSpeechMinMs: amdMachineSpeechMin,
+    maxSilenceBeforeSpeechMs: amdMaxSilence,
+    detectionTimeoutMs: amdDetectionTimeout,
+  },
 };

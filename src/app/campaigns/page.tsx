@@ -45,6 +45,7 @@ type CallRow = {
   costCents: number | null;
   dtmf: string | null;
   createdAt: string;
+  voicemailStatus?: string;
   campaign: { id: string; name: string };
   lead: {
     phoneNumber: string | null;
@@ -113,12 +114,13 @@ export default function CampaignStatusPage() {
       const total = metrics?.calls.total ?? 0;
       const answered = metrics?.calls.answered ?? 0;
       const dtmf = metrics?.calls.dtmf ?? 0;
+      const voicemail = metrics?.calls.voicemail ?? 0;
       const spend = ((metrics?.calls.costCents ?? 0) / 100).toFixed(2);
-      return { total, answered, dtmf, spend: +spend };
+      return { total, answered, dtmf, voicemail, spend: +spend };
     }, [metrics]);
 
-    function exportCsv() {
-      const header = ["id", "time", "caller", "callee", "status", "duration", "cost", "dtmf", "raw_line"].join(",");
+      function exportCsv() {
+        const header = ["id", "time", "caller", "callee", "status", "duration", "cost", "dtmf", "voicemail", "raw_line"].join(",");
       const body = filtered
         .map((r) =>
           [
@@ -130,6 +132,7 @@ export default function CampaignStatusPage() {
             r.durationSeconds ?? 0,
             ((r.costCents ?? 0) / 100).toFixed(4),
             r.dtmf ?? "",
+              r.voicemailStatus ?? "",
             (r.lead?.rawLine ?? "").replace(/,/g, " "),
           ].join(","),
         )
@@ -171,7 +174,7 @@ export default function CampaignStatusPage() {
       description="Track every outbound call with live status, DTMF capture and spend telemetry."
       actions={exportAction}
     >
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <Stat title="Total calls" value={stats.total.toLocaleString()} loading={loading} />
         <Stat
           title="Answered rate"
@@ -187,6 +190,12 @@ export default function CampaignStatusPage() {
           tone="violet"
           loading={loading}
         />
+          <Stat
+            title="Voicemail flagged"
+            value={stats.voicemail.toLocaleString()}
+            tone="rose"
+            loading={loading}
+          />
         <Stat
           title="Spend"
           value={`$${stats.spend.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
@@ -264,6 +273,7 @@ export default function CampaignStatusPage() {
                     <th className="px-5 py-4 text-left">Status</th>
                     <th className="px-5 py-4 text-left">Duration</th>
                     <th className="px-5 py-4 text-left">DTMF</th>
+                    <th className="px-5 py-4 text-left">Voicemail</th>
                       <th className="px-5 py-4 text-left">Lead input</th>
                     <th className="px-5 py-4 text-left">Cost</th>
                   </tr>
@@ -298,15 +308,22 @@ export default function CampaignStatusPage() {
                             {r.durationSeconds ? `${r.durationSeconds}s` : "—"}
                           </td>
                           <td className="px-5 py-4 font-mono text-xs text-zinc-500 dark:text-zinc-300">{r.dtmf || ""}</td>
-                          <td className="px-5 py-4 text-xs text-zinc-500 dark:text-zinc-300">
-                            {r.lead?.rawLine ? (
-                              <span title={r.lead.rawLine} className="line-clamp-2 max-w-xs">
-                                {r.lead.rawLine}
-                              </span>
-                            ) : (
-                              "—"
-                            )}
-                          </td>
+                            <td className="px-5 py-4">
+                              {r.voicemailStatus && r.voicemailStatus !== "unknown" ? (
+                                <VoicemailBadge value={r.voicemailStatus} />
+                              ) : (
+                                <span className="text-xs text-zinc-400">—</span>
+                              )}
+                            </td>
+                            <td className="px-5 py-4 text-xs text-zinc-500 dark:text-zinc-300">
+                              {r.lead?.rawLine ? (
+                                <span title={r.lead.rawLine} className="block max-w-sm whitespace-pre-wrap break-words">
+                                  {r.lead.rawLine}
+                                </span>
+                              ) : (
+                                "—"
+                              )}
+                            </td>
                           <td className="px-5 py-4 tabular-nums text-zinc-700 dark:text-zinc-100">
                             ${((r.costCents ?? 0) / 100).toFixed(4)}
                           </td>
@@ -366,6 +383,31 @@ function StatusBadge({ value }: { value: string }) {
     <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-[11px] font-semibold ring-1 ${m.cls}`}>
       <Icons.Dot className="h-1.5 w-1.5" />
       {m.label}
+    </span>
+  );
+}
+
+function VoicemailBadge({ value }: { value: string }) {
+  const map: Record<string, { label: string; cls: string }> = {
+    machine: {
+      label: "Machine",
+      cls: "bg-rose-500/15 text-rose-600 ring-rose-400/30 dark:bg-rose-500/15 dark:text-rose-300",
+    },
+    retrying: {
+      label: "Retrying",
+      cls: "bg-amber-500/15 text-amber-600 ring-amber-400/30 dark:bg-amber-500/15 dark:text-amber-300",
+    },
+    human: {
+      label: "Human",
+      cls: "bg-emerald-500/15 text-emerald-600 ring-emerald-400/30 dark:bg-emerald-500/15 dark:text-emerald-300",
+    },
+  };
+  const key = value?.toLowerCase?.() ?? "machine";
+  const badge = map[key] ?? map.machine;
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full px-3 py-0.5 text-[10px] font-semibold ring-1 ${badge.cls}`}>
+      <Icons.Dot className="h-1.5 w-1.5" />
+      {badge.label}
     </span>
   );
 }

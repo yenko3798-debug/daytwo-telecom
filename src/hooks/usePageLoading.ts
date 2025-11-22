@@ -1,33 +1,32 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from "react";
 
-export function usePageLoading(duration = 520) {
-  const [loading, setLoading] = useState(true)
-  const timerRef = useRef<number | null>(null)
+export function usePageLoading() {
+  const [loading, setLoading] = useState(true);
+  const rafRef = useRef<number | null>(null);
 
   const clear = useCallback(() => {
-    if (timerRef.current !== null) {
-      window.clearTimeout(timerRef.current)
-      timerRef.current = null
+    if (rafRef.current !== null) {
+      window.cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
     }
-  }, [])
-
-  const begin = useCallback(
-    (nextDuration?: number) => {
-      clear()
-      setLoading(true)
-      const timeout = window.setTimeout(() => {
-        setLoading(false)
-        timerRef.current = null
-      }, nextDuration ?? duration)
-      timerRef.current = timeout
-    },
-    [clear, duration],
-  )
+  }, []);
 
   useEffect(() => {
-    begin(duration)
-    return clear
-  }, [begin, clear, duration])
+    rafRef.current = window.requestAnimationFrame(() => {
+      rafRef.current = null;
+      setLoading(false);
+    });
+    return clear;
+  }, [clear]);
 
-  return { loading, begin, setLoading }
+  const begin = useCallback(() => {
+    clear();
+    setLoading(true);
+    rafRef.current = window.requestAnimationFrame(() => {
+      rafRef.current = null;
+      setLoading(false);
+    });
+  }, [clear]);
+
+  return { loading, begin, setLoading };
 }

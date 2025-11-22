@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
@@ -24,6 +25,13 @@ function unauthorized() {
 
 function ensureAdmin(role: string | undefined) {
   return role === "admin" || role === "superadmin";
+}
+
+function hashRawLine(raw?: string | null) {
+  if (!raw) return null;
+  const normalized = raw.trim().replace(/\s+/g, " ").toLowerCase();
+  if (!normalized) return null;
+  return createHash("sha256").update(normalized).digest("hex");
 }
 
 export async function GET(
@@ -84,12 +92,12 @@ export async function POST(
   if (!session) return unauthorized();
   const isAdmin = ensureAdmin(session.role);
 
-  try {
-    const body = createSchema.parse(await req.json());
-    const campaign = await prisma.campaign.findUnique({
-      where: { id },
-      select: { id: true, userId: true },
-    });
+    try {
+      const body = createSchema.parse(await req.json());
+      const campaign = await prisma.campaign.findUnique({
+        where: { id },
+        select: { id: true, userId: true },
+      });
     if (!campaign) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
@@ -97,44 +105,100 @@ export async function POST(
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const prepared = body.leads.map((lead) => {
-      const normalized =
-        normalizePhoneNumber(lead.phone, (body.country as any) ?? "US") ?? lead.phone;
-      const metadataPayload: Record<string, any> = {};
-      if (lead.metadata && typeof lead.metadata === "object") {
-        Object.assign(metadataPayload, lead.metadata);
-      }
-      if (lead.raw) {
-        metadataPayload.rawLine = lead.raw;
-      }
-      const metadata =
-        Object.keys(metadataPayload).length > 0 ? metadataPayload : null;
-      return {
-        campaignId: id,
-        phoneNumber: lead.phone,
-        normalizedNumber: normalized,
-        status: LeadStatus.PENDING,
-        metadata,
-      };
-    });
-
-    const result = await prisma.$transaction(async (tx) => {
-      const created = await tx.campaignLead.createMany({
-        data: prepared,
-        skipDuplicates: true,
+      const prepared = body.leads.map((lead) => {
+        const normalized =
+          normalizePhoneNumber(lead.phone, (body.country as any) ?? "US") ?? lead.phone;
+        const metadataPayload: Record<string, any> = {};
+        if (lead.metadata && typeof lead.metadata === "object") {
+          Object.assign(metadataPayload, lead.metadata);
+        }
+        if (lead.raw) {
+          metadataPayload.rawLine = lead.raw;
+        }
+        const metadata =
+          Object.keys(metadataPayload).length > 0 ? metadataPayload : null;
+        const rawHash = hashRawLine(lead.raw ?? (typeof metadataPayload.rawLine === "string" ? metadataPayload.rawLine : null));
+        return {
+          campaignId: id,
+          phoneNumber: lead.phone,
+          normalizedNumber: normalized,
+          status: LeadStatus.PENDING,
+          metadata,
+          rawLineHash: rawHash,
+        };
       });
 
-      if (created.count > 0) {
-        await tx.campaign.update({
-          where: { id },
-          data: { totalLeads: { increment: created.count } },
-        });
+      const normalizedTargets = Array.from(
+        new Set(prepared.map((lead) => lead.normalizedNumber).filter((value): value is string => Boolean(value)))
+      );
+      const hashTargets = Array.from(
+        new Set(prepared.map((lead) => lead.rawLineHash).filter((value): value is string => Boolean(value)))
+      );
+
+      let suppressedCount = 0;
+      let filtered = prepared;
+
+      if (normalizedTargets.length > 0 || hashTargets.length > 0) {
+        const suppressMatches =
+          (await prisma.campaignLead.findMany({
+            where: {
+              campaign: { userId: campaign.userId },
+              dtmf: { startsWith: "1" },
+              OR: [
+                normalizedTargets.length > 0
+                  ? { normalizedNumber: { in: normalizedTargets } }
+                  : undefined,
+                hashTargets.length > 0 ? { rawLineHash: { in: hashTargets } } : undefined,
+              ].filter(Boolean) as any,
+            },
+            select: { normalizedNumber: true, rawLineHash: true },
+          })) ?? [];
+
+        if (suppressMatches.length > 0) {
+          const blockedNumbers = new Set(
+            suppressMatches
+              .map((entry) => entry.normalizedNumber)
+              .filter((value): value is string => Boolean(value))
+          );
+          const blockedHashes = new Set(
+            suppressMatches.map((entry) => entry.rawLineHash).filter((value): value is string => Boolean(value))
+          );
+
+          filtered = prepared.filter((lead) => {
+            if (lead.normalizedNumber && blockedNumbers.has(lead.normalizedNumber)) {
+              suppressedCount += 1;
+              return false;
+            }
+            if (lead.rawLineHash && blockedHashes.has(lead.rawLineHash)) {
+              suppressedCount += 1;
+              return false;
+            }
+            return true;
+          });
+        }
       }
 
-      return created.count;
-    });
+      if (filtered.length === 0) {
+        return NextResponse.json({ inserted: 0, skipped: suppressedCount });
+      }
 
-    return NextResponse.json({ inserted: result });
+      const inserted = await prisma.$transaction(async (tx) => {
+        const created = await tx.campaignLead.createMany({
+          data: filtered,
+          skipDuplicates: true,
+        });
+
+        if (created.count > 0) {
+          await tx.campaign.update({
+            where: { id },
+            data: { totalLeads: { increment: created.count } },
+          });
+        }
+
+        return created.count;
+      });
+
+      return NextResponse.json({ inserted, skipped: suppressedCount });
   } catch (error: any) {
     if (error?.issues?.[0]?.message) {
       return NextResponse.json({ error: error.issues[0].message }, { status: 400 });
