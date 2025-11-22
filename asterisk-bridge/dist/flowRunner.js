@@ -101,7 +101,7 @@ function resolveMediaBaseDir() {
         const target = join(config.soundsRoot, prefix.replace(/\/$/, ""));
         return target;
     }
-    return config.soundsDir;
+    return join(config.soundsRoot, "bridge-cache");
 }
 async function ensureNormalizedVariants(file) {
     const baseDir = resolveMediaBaseDir();
