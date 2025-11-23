@@ -55,10 +55,11 @@ export async function POST(req: Request) {
 
   const publicBase = process.env.APP_URL?.replace(/\/$/, "");
   const relativePath = `/uploads/audio/${fileName}`;
-  const url = publicBase ? `${publicBase}${relativePath}` : relativePath;
+  const absoluteUrl = publicBase ? `${publicBase}${relativePath}` : null;
   return NextResponse.json(
     {
-      url,
+      url: relativePath,
+      publicUrl: absoluteUrl,
       originalName,
       mimeType: file.type || null,
       size: buffer.length,

@@ -151,15 +151,45 @@ function sessionLogger(state: SessionState) {
   return logger.child({ sessionId: state.sessionId });
 }
 
+function isPrivateHostname(hostname: string) {
+  const lower = hostname.toLowerCase();
+  if (lower === "localhost" || lower === "127.0.0.1" || lower === "::1") return true;
+  if (lower.endsWith(".local")) return true;
+  if (lower.startsWith("10.")) return true;
+  if (lower.startsWith("192.168.")) return true;
+  if (lower.startsWith("169.254.")) return true;
+  const match172 = lower.match(/^172\.(\d+)\./);
+  if (match172) {
+    const value = Number(match172[1]);
+    if (value >= 16 && value <= 31) return true;
+  }
+  if (lower.startsWith("fc") || lower.startsWith("fd")) return true;
+  return false;
+}
+
+function buildMediaBaseUrl(path: string) {
+  return new URL(path, `${config.mediaBaseUrl}/`).toString();
+}
+
 function resolveMediaUrl(raw: string) {
   if (!raw || raw.trim().length === 0) {
     throw new Error("Playback URL is missing");
   }
-  const resolved = new URL(raw, `${config.panelBaseUrl}/`);
-  if (resolved.protocol !== "http:" && resolved.protocol !== "https:") {
-    throw new Error("Playback files must be served over HTTP or HTTPS");
+  const value = raw.trim();
+  if (/^https?:\/\//i.test(value)) {
+    const parsed = new URL(value);
+    if (
+      isPrivateHostname(parsed.hostname) &&
+      !isPrivateHostname(new URL(config.mediaBaseUrl).hostname)
+    ) {
+      return buildMediaBaseUrl(parsed.pathname + parsed.search + parsed.hash);
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      throw new Error("Playback files must be served over HTTP or HTTPS");
+    }
+    return parsed.toString();
   }
-  return resolved.toString();
+  return buildMediaBaseUrl(value);
 }
 
 function mediaBaseId(file: string) {
@@ -277,6 +307,14 @@ async function ensureNormalizedVariants(sourceFile: string) {
     await convertWavToUlaw(wavPath, ulawPath);
   }
   await ensureNonEmpty(ulawPath);
+  const wavStats = await fs.stat(wavPath).catch(() => null);
+  const ulawStats = await fs.stat(ulawPath).catch(() => null);
+  logger.debug("Normalized media ready", {
+    wavPath,
+    wavBytes: wavStats?.size ?? 0,
+    ulawPath,
+    ulawBytes: ulawStats?.size ?? 0,
+  });
   return { wav: wavPath, ulaw: ulawPath };
 }
 
