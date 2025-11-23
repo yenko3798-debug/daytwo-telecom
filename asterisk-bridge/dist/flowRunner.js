@@ -1,14 +1,18 @@
 import AriClient from "ari-client";
 import { promises as fs } from "fs";
-import { join, relative } from "path";
+import { basename, join, relative } from "path";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { config } from "./config.js";
 import { hashKey, newId } from "./utils.js";
+import { logger } from "./logger.js";
 const execFileAsync = promisify(execFile);
 let client;
 const sessionsByChannel = new Map();
 const bridges = new Map();
+function sessionLogger(state) {
+    return logger.child({ sessionId: state.sessionId });
+}
 function resolveMediaUrl(raw) {
     if (!raw || raw.trim().length === 0) {
         throw new Error("Playback URL is missing");
@@ -19,23 +23,35 @@ function resolveMediaUrl(raw) {
     }
     return resolved.toString();
 }
+function mediaBaseId(file) {
+    return basename(file).replace(/\.[^/.]+$/, "");
+}
+async function ensureNonEmpty(file) {
+    const stats = await fs.stat(file);
+    if (!stats.isFile() || stats.size < 200) {
+        throw new Error("Normalized audio has no content");
+    }
+}
 async function downloadToCache(url) {
     const absoluteUrl = resolveMediaUrl(url);
     const key = hashKey(absoluteUrl);
-    const extensionMatch = url.match(/\.(wav|ulaw|sln16|gsm|mp3|ogg)(\?.*)?$/i);
+    const extensionMatch = absoluteUrl.match(/\.(wav|ulaw|sln16|gsm|mp3|ogg)(\?.*)?$/i);
     const extension = extensionMatch ? extensionMatch[1].toLowerCase() : "wav";
     const file = join(config.cacheDir, `${key}.${extension}`);
     try {
         await fs.access(file);
+        logger.debug("Media cache hit", { url: absoluteUrl, file });
         return file;
     }
     catch {
+        logger.debug("Media cache miss", { url: absoluteUrl, file });
         const response = await fetch(absoluteUrl);
         if (!response.ok) {
             throw new Error(`Unable to download media ${absoluteUrl}`);
         }
         const arrayBuffer = await response.arrayBuffer();
         await fs.writeFile(file, Buffer.from(arrayBuffer));
+        logger.debug("Media cached", { url: absoluteUrl, file });
         return file;
     }
 }
@@ -47,10 +63,12 @@ async function synthesizeTts(text, voice, language) {
     const file = join(config.cacheDir, `${key}.wav`);
     try {
         await fs.access(file);
+        logger.debug("TTS cache hit", { file, voice, language });
         return file;
     }
     catch {
         const languageCode = language ?? "en-US";
+        logger.debug("Synthesizing TTS prompt", { file, voice, language: languageCode, chars: text.length });
         await execFileAsync("pico2wave", ["-l", languageCode, "-w", file, text]);
         return file;
     }
@@ -77,8 +95,10 @@ async function normalizeToWav(input, output) {
     const tmp = `${output}.tmp`;
     await fs.rm(tmp, { force: true }).catch(() => { });
     const soxArgs = [input, "-r", "8000", "-c", "1", "-b", "16", "-e", "signed-integer", tmp];
+    logger.debug("Normalizing audio via sox", { input, output });
     if (!(await tryTranscode("sox", soxArgs))) {
         const ffmpegArgs = ["-y", "-i", input, "-ar", "8000", "-ac", "1", "-sample_fmt", "s16", tmp];
+        logger.debug("Normalizing audio via ffmpeg fallback", { input, output });
         if (!(await tryTranscode("ffmpeg", ffmpegArgs))) {
             throw new Error("Unable to normalize audio to 8k mono WAV. Install sox or ffmpeg.");
         }
@@ -90,8 +110,10 @@ async function convertWavToUlaw(input, output) {
     const tmp = `${output}.tmp`;
     await fs.rm(tmp, { force: true }).catch(() => { });
     const soxArgs = [input, "-t", "ulaw", "-r", "8000", "-c", "1", tmp];
+    logger.debug("Converting WAV to ulaw via sox", { input, output });
     if (!(await tryTranscode("sox", soxArgs))) {
         const ffmpegArgs = ["-y", "-i", input, "-ar", "8000", "-ac", "1", "-f", "mulaw", tmp];
+        logger.debug("Converting WAV to ulaw via ffmpeg fallback", { input, output });
         if (!(await tryTranscode("ffmpeg", ffmpegArgs))) {
             throw new Error("Unable to convert audio to ulaw. Install sox or ffmpeg.");
         }
@@ -99,16 +121,19 @@ async function convertWavToUlaw(input, output) {
     await fs.rename(tmp, output);
     return output;
 }
-async function ensureNormalizedVariants(file) {
-    const base = file.replace(/\.[^/.]+$/, "");
-    const wavPath = `${base}.wav`;
-    const ulawPath = `${base}.ulaw`;
+async function ensureNormalizedVariants(sourceFile) {
+    const baseId = mediaBaseId(sourceFile);
+    const wavPath = join(config.soundsDir, `${baseId}.wav`);
+    const ulawPath = join(config.soundsDir, `${baseId}.ulaw`);
     if (!(await fileExists(wavPath))) {
-        await normalizeToWav(file, wavPath);
+        logger.debug("Creating normalized WAV variant", { sourceFile, wavPath });
+        await normalizeToWav(sourceFile, wavPath);
     }
     if (!(await fileExists(ulawPath))) {
+        logger.debug("Creating normalized ulaw variant", { wavPath, ulawPath });
         await convertWavToUlaw(wavPath, ulawPath);
     }
+    await ensureNonEmpty(ulawPath);
     return { wav: wavPath, ulaw: ulawPath };
 }
 function normalizePrefix(value) {
@@ -118,6 +143,10 @@ function normalizePrefix(value) {
     return trimmed.length ? `${trimmed}/` : "";
 }
 async function ensureMedia(playback) {
+    const descriptor = playback.mode === "file"
+        ? playback.url
+        : hashKey(`${playback.language ?? "en-US"}:${playback.voice ?? "default"}:${playback.text}`);
+    logger.debug("Ensuring playback media", { mode: playback.mode, descriptor });
     const file = playback.mode === "file"
         ? await downloadToCache(playback.url)
         : await synthesizeTts(playback.text, playback.voice, playback.language);
@@ -129,7 +158,9 @@ async function ensureMedia(playback) {
     const sanitizedPath = relativePath.replace(/^\/+/, "");
     const prefix = normalizePrefix(config.soundPrefix);
     const needsPrefix = prefix.length > 0 && sanitizedPath.startsWith(prefix) ? sanitizedPath : `${prefix}${sanitizedPath}`;
-    return `sound:${needsPrefix}`;
+    const media = `sound:${needsPrefix}`;
+    logger.debug("Prepared playback media", { mode: playback.mode, descriptor, media });
+    return media;
 }
 const playbackMediaCache = new Map();
 function playbackCacheKey(playback) {
@@ -143,11 +174,15 @@ function loadPlaybackMedia(playback) {
     const key = playbackCacheKey(playback);
     let task = playbackMediaCache.get(key);
     if (!task) {
+        logger.debug("Caching playback media", { key, mode: playback.mode });
         task = ensureMedia(playback).catch((error) => {
             playbackMediaCache.delete(key);
             throw error;
         });
         playbackMediaCache.set(key, task);
+    }
+    else {
+        logger.debug("Reusing cached playback media", { key, mode: playback.mode });
     }
     return task;
 }
@@ -182,9 +217,11 @@ async function warmFlowMedia(flow) {
     const tasks = [];
     for (const node of flow.nodes) {
         if (node.type === "play") {
+            logger.debug("Warming play node media", { nodeId: node.id });
             tasks.push(loadPlaybackMedia(node.playback));
         }
         else if (node.type === "gather" && node.prompt) {
+            logger.debug("Warming gather prompt media", { nodeId: node.id });
             tasks.push(loadPlaybackMedia(node.prompt));
         }
     }
@@ -201,11 +238,11 @@ async function notifyPanel(event, body) {
         });
         if (!response.ok) {
             const text = await response.text();
-            console.error(`Webhook ${event} failed: ${text}`);
+            logger.warn("Panel webhook failed", { event, status: response.status, body, text });
         }
     }
     catch (error) {
-        console.error(`Webhook ${event} error: ${error?.message ?? error}`);
+        logger.warn("Panel webhook error", { event, error: error?.message ?? error });
     }
 }
 async function fetchSession(sessionId) {
@@ -222,14 +259,23 @@ async function fetchSession(sessionId) {
 }
 async function playMedia(channel, media) {
     return new Promise((resolve, reject) => {
+        logger.debug("Starting channel playback", { channelId: channel.id, media });
         channel.play({ media }, (error, playback) => {
             if (error) {
+                logger.warn("Playback start failed", { channelId: channel.id, media, error: error?.message ?? error });
                 reject(error);
                 return;
             }
-            playback.once("PlaybackFinished", () => resolve());
-            playback.once("PlaybackStopped", () => resolve());
+            playback.once("PlaybackFinished", () => {
+                logger.debug("Playback finished", { channelId: channel.id, media });
+                resolve();
+            });
+            playback.once("PlaybackStopped", () => {
+                logger.debug("Playback stopped", { channelId: channel.id, media });
+                resolve();
+            });
             playback.once("PlaybackFailed", (event) => {
+                logger.warn("Playback failed mid-stream", { channelId: channel.id, media, event });
                 reject(new Error(event?.cause ?? "Playback failed"));
             });
         });
@@ -264,8 +310,10 @@ function createSessionState(payload, channel) {
     return state;
 }
 async function handleGather(state, node) {
+    const log = sessionLogger(state);
     let attempt = 0;
     while (attempt < node.attempts) {
+        log.debug("Starting gather attempt", { nodeId: node.id, attempt: attempt + 1 });
         if (node.prompt) {
             const media = await loadPlaybackMedia(node.prompt);
             await playMedia(state.channel, media);
@@ -293,6 +341,7 @@ async function handleGather(state, node) {
             };
         });
         if (digits.length >= node.minDigits) {
+            log.debug("Gather received digits", { nodeId: node.id, digits });
             state.variables[node.variable] = digits;
             state.digits += digits;
             const aggregateDigits = state.digits;
@@ -304,16 +353,20 @@ async function handleGather(state, node) {
                 variable: node.variable,
             });
             const branch = node.branches[digits] ?? node.defaultNext;
+            log.debug("Gather branching", { nodeId: node.id, digits, next: branch ?? null });
             return branch ?? null;
         }
+        log.debug("Gather attempt timed out or insufficient digits", { nodeId: node.id, attempt: attempt + 1 });
         attempt += 1;
     }
     return node.defaultNext ?? null;
 }
 async function handleDial(state, node) {
+    const log = sessionLogger(state);
     const bridgeId = newId("bridge");
     const bridge = client.Bridge();
     const timeoutMs = (node.timeoutSeconds ?? config.dialTimeout) * 1000;
+    log.debug("Creating bridge for dial node", { nodeId: node.id, bridgeId });
     await new Promise((resolve, reject) => {
         bridge.create({ type: "mixing", bridgeId }, (error) => {
             if (error)
@@ -333,6 +386,7 @@ async function handleDial(state, node) {
     const dialPromise = new Promise((resolve, reject) => {
         const timeout = setTimeout(() => {
             bridges.delete(bridgeId);
+            log.warn("Dial timed out before bridge channel joined", { nodeId: node.id, bridgeId });
             reject(new Error("Dial timed out"));
         }, timeoutMs);
         const bridgeState = {
@@ -356,6 +410,7 @@ async function handleDial(state, node) {
     const callerId = node.callerId ?? state.payload.session.callerId;
     const appArgs = ["bridge", state.sessionId, bridgeId].join(",");
     try {
+        log.debug("Originating outbound leg", { nodeId: node.id, endpoint: node.endpoint, callerId, bridgeId });
         await new Promise((resolve, reject) => {
             client.channels.originate({
                 endpoint: node.endpoint,
@@ -371,6 +426,7 @@ async function handleDial(state, node) {
             });
         });
         await dialPromise;
+        log.info("Dial node completed", { nodeId: node.id, bridgeId });
     }
     finally {
         bridges.delete(bridgeId);
@@ -389,16 +445,19 @@ function assertNever(value) {
     throw new Error(`Unsupported node ${value.type}`);
 }
 async function runFlow(state) {
+    const log = sessionLogger(state);
     let current = state.flow.entry;
     while (current !== null && !state.completed) {
         const node = state.nodeMap.get(current);
         if (!node) {
             throw new Error(`Flow node ${current} missing`);
         }
+        log.debug("Executing flow node", { nodeId: node.id, type: node.type });
         switch (node.type) {
             case "play": {
                 const media = await loadPlaybackMedia(node.playback);
                 await playMedia(state.channel, media);
+                log.debug("Play node finished", { nodeId: node.id });
                 current = node.next ?? null;
                 break;
             }
@@ -410,14 +469,17 @@ async function runFlow(state) {
                     minDigits: node.minDigits ?? 1,
                     timeoutSeconds: node.timeoutSeconds ?? 5,
                 });
+                log.debug("Gather node finished", { nodeId: node.id, next: current });
                 break;
             }
             case "dial": {
                 current = await handleDial(state, node);
+                log.debug("Dial node finished", { nodeId: node.id, next: current });
                 break;
             }
             case "pause": {
                 await pause(node.durationSeconds * 1000);
+                log.debug("Pause node finished", { nodeId: node.id });
                 current = node.next ?? null;
                 break;
             }
@@ -428,6 +490,7 @@ async function runFlow(state) {
                 await new Promise((resolve) => {
                     state.channel.hangup(params, () => resolve());
                 }).catch(() => { });
+                log.info("Hangup node executed", { nodeId: node.id, cause });
                 return;
             }
             default:
@@ -440,11 +503,13 @@ async function handleBridgeStart(event, channel) {
     const bridgeId = event.args[2];
     const bridgeState = bridges.get(bridgeId);
     if (!bridgeState) {
+        logger.debug("Bridge channel arrived with unknown bridge", { sessionId, bridgeId, channelId: channel.id });
         await new Promise((resolve) => {
             channel.hangup({}, () => resolve());
         });
         return;
     }
+    logger.debug("Bridge channel joining", { sessionId, bridgeId, channelId: channel.id });
     bridgeState.channelId = channel.id;
     await new Promise((resolve, reject) => {
         channel.answer((error) => {
@@ -467,9 +532,11 @@ async function handleSessionStart(event, channel) {
     const sessionId = event.args[2];
     const payload = await fetchSession(sessionId);
     const state = createSessionState(payload, channel);
+    const log = sessionLogger(state);
+    log.info("Session started", { channelId: channel.id });
     sessionsByChannel.set(channel.id, state);
     warmFlowMedia(state.flow).catch((error) => {
-        console.error(`Media warmup failed: ${error?.message ?? error}`);
+        logger.warn("Media warmup failed", { sessionId: state.sessionId, error: error?.message ?? error });
     });
     await new Promise((resolve, reject) => {
         channel.answer((error) => {
@@ -483,10 +550,12 @@ async function handleSessionStart(event, channel) {
         sessionId: state.sessionId,
         channelId: channel.id,
     });
+    log.info("Channel answered", { channelId: channel.id });
     try {
         await runFlow(state);
     }
     catch (error) {
+        log.error("Flow execution failed", { error: error?.message ?? error });
         await notifyPanel("call.failed", {
             sessionId: state.sessionId,
             error: error?.message ?? String(error),
@@ -503,6 +572,12 @@ function handleDtmf(event) {
         return;
     if (state.gather) {
         state.gather.input += event.digit;
+        logger.debug("DTMF digit received", {
+            sessionId: state.sessionId,
+            digit: event.digit,
+            collected: state.gather.input,
+            maxDigits: state.gather.node.maxDigits,
+        });
         if (state.gather.input.length >= state.gather.node.maxDigits) {
             const digits = state.gather.input;
             const gather = state.gather;
@@ -516,10 +591,12 @@ async function handleStasisEnd(event) {
     if (!state) {
         const bridgeEntry = Array.from(bridges.values()).find((b) => b.channelId === event.channel.id);
         if (bridgeEntry) {
+            logger.debug("Bridge channel destroyed", { bridgeId: bridgeEntry.id, channelId: event.channel.id });
             bridgeEntry.resolve();
         }
         return;
     }
+    const log = sessionLogger(state);
     sessionsByChannel.delete(event.channel.id);
     if (!state.completionSent) {
         state.completionSent = true;
@@ -529,11 +606,13 @@ async function handleStasisEnd(event) {
             durationSeconds: duration,
             dtmf: state.digits.length > 0 ? state.digits : undefined,
         });
+        log.info("Session completed", { durationSeconds: duration, digits: state.digits });
     }
 }
 export async function startFlowRunner() {
     if (client)
         return;
+    logger.info("Starting flow runner", { ariBaseUrl: config.ariBaseUrl, application: config.ariApplication });
     client = await AriClient.connect(config.ariBaseUrl, config.ariUsername, config.ariPassword);
     client.on("StasisStart", async (event, channel) => {
         try {
@@ -545,7 +624,7 @@ export async function startFlowRunner() {
             }
         }
         catch (error) {
-            console.error(`StasisStart error: ${error?.message ?? error}`);
+            logger.error("StasisStart handler error", { error: error?.message ?? error });
         }
     });
     client.on("StasisEnd", async (event) => {
@@ -553,7 +632,7 @@ export async function startFlowRunner() {
             await handleStasisEnd(event);
         }
         catch (error) {
-            console.error(`StasisEnd error: ${error?.message ?? error}`);
+            logger.error("StasisEnd handler error", { error: error?.message ?? error });
         }
     });
     client.on("ChannelDestroyed", (event) => {
@@ -567,8 +646,9 @@ export async function startFlowRunner() {
             handleDtmf(event);
         }
         catch (error) {
-            console.error(`DTMF handler error: ${error?.message ?? error}`);
+            logger.error("DTMF handler error", { error: error?.message ?? error });
         }
     });
     client.start(config.ariApplication);
+    logger.info("Flow runner ready", { application: config.ariApplication });
 }

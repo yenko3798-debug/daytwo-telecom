@@ -18,18 +18,10 @@ function prepareMetadata(input: any) {
   return input;
 }
 
-let bridgeDisabledLogged = false;
-
 function bridgeConfig() {
   const base = process.env.ASTERISK_BRIDGE_URL?.replace(/\/$/, "");
   const token = process.env.ASTERISK_BRIDGE_TOKEN;
-  if (!base || !token) {
-    if (!bridgeDisabledLogged) {
-      console.warn("ASTERISK_BRIDGE_URL or ASTERISK_BRIDGE_TOKEN is not configured; skipping bridge sync");
-      bridgeDisabledLogged = true;
-    }
-    return null;
-  }
+  if (!base || !token) return null;
   return { base, token };
 }
 

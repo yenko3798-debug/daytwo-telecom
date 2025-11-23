@@ -1,5 +1,6 @@
 import { config } from "./config.js";
 import { toSafeId } from "./trunkManager.js";
+import { logger } from "./logger.js";
 
 type RouteLike = {
   id: string;
@@ -78,6 +79,12 @@ function buildEndpoint(route: RouteLike, dialString: string) {
 
 export async function originateCall(body: OriginateRequest): Promise<OriginateResponse> {
   const endpoint = buildEndpoint(body.route, body.dialString);
+  logger.debug("Originating ARI call", {
+    routeId: body.route.id,
+    dialString: body.dialString,
+    endpoint,
+    callerId: body.callerId,
+  });
   const params = new URLSearchParams();
   params.set("endpoint", endpoint);
   params.set("callerId", body.callerId);
@@ -104,6 +111,7 @@ export async function originateCall(body: OriginateRequest): Promise<OriginateRe
 
   if (!response.ok) {
     const text = await response.text().catch(() => "");
+    logger.warn("ARI originate failed", { status: response.status, text });
     throw new Error(`ARI originate failed (${response.status}): ${text}`);
   }
 
@@ -115,5 +123,6 @@ export async function originateCall(body: OriginateRequest): Promise<OriginateRe
   }
 
   const channelId = payload?.id ?? null;
+  logger.info("ARI originate succeeded", { channelId, routeId: body.route.id, dialString: body.dialString });
   return { channelId, payload };
 }

@@ -519,17 +519,23 @@ export default function FlowBuilderPage() {
     async (file: File) => {
       const form = new FormData();
       form.append("file", file);
-      const res = await fetch("/api/media/audio", {
-        method: "POST",
-        body: form,
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => null);
-        throw new Error(data?.error ?? "Unable to upload audio");
+      try {
+        const res = await fetch("/api/media/audio", {
+          method: "POST",
+          body: form,
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => null);
+          throw new Error(data?.error ?? "Unable to upload audio");
+        }
+        return res.json();
+      } catch (error: any) {
+        const message = error?.message ?? "Unable to upload audio";
+        push(message, "error");
+        throw error instanceof Error ? error : new Error(message);
       }
-      return res.json();
     },
-    []
+    [push]
   );
 
   const handleSave = useCallback(async () => {
@@ -1277,8 +1283,7 @@ function PlaybackEditor({ playback, onChange, uploadAudio, label }: PlaybackEdit
         url: result.url,
         mimeType: result.mimeType ?? file.type,
       });
-    } catch (error) {
-      console.error(error);
+    } catch {
     } finally {
       setUploading(false);
     }

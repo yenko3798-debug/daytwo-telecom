@@ -2,6 +2,7 @@ import { promises as fs } from "fs";
 import { join } from "path";
 import { config } from "./config.js";
 import { hashKey, runCommand } from "./utils.js";
+import { logger } from "./logger.js";
 export function toSafeId(id) {
     const trimmed = id.toLowerCase().replace(/[^a-z0-9]/g, "");
     if (trimmed.length > 0)
@@ -90,6 +91,7 @@ class TrunkManager {
         const file = join(config.pjsipDir, `route-${payload.id}.conf`);
         const content = buildConfig(payload);
         await fs.writeFile(file, content);
+        logger.info("Trunk configuration written", { trunkId: payload.id, file });
         await runCommand("asterisk", ["-rx", "pjsip reload"]);
         return { file };
     }
@@ -102,6 +104,7 @@ class TrunkManager {
             if (error?.code !== "ENOENT")
                 throw error;
         }
+        logger.info("Trunk configuration removed", { trunkId: id, file });
         await runCommand("asterisk", ["-rx", "pjsip reload"]);
         return { file };
     }
