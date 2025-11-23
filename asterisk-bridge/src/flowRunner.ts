@@ -231,7 +231,8 @@ async function ensureNormalizedVariants(file: string) {
   const base = file.replace(/\.[^/.]+$/, "");
   const wavPath = `${base}.wav`;
   const ulawPath = `${base}.ulaw`;
-  if (!(await fileExists(wavPath))) {
+  const needsWav = !(await fileExists(wavPath)) || file === wavPath;
+  if (needsWav) {
     await normalizeToWav(file, wavPath);
   }
   if (!(await fileExists(ulawPath))) {
@@ -242,8 +243,34 @@ async function ensureNormalizedVariants(file: string) {
 
 function normalizePrefix(value?: string) {
   if (!value) return "";
-  const trimmed = value.trim().replace(/^\/+|\/+$/g, "");
-  return trimmed.length ? `${trimmed}/` : "";
+  return value.trim().replace(/^\/+|\/+$/g, "");
+}
+
+function applySoundPrefix(path: string) {
+  const normalizedPath = path.replace(/^\/+/, "");
+  const prefix = normalizePrefix(config.soundPrefix);
+  if (!prefix) {
+    return normalizedPath;
+  }
+  const lowerPrefix = prefix.toLowerCase();
+  let remainder = normalizedPath;
+  while (remainder.length > 0) {
+    const lowerRemainder = remainder.toLowerCase();
+    if (lowerRemainder === lowerPrefix) {
+      remainder = "";
+      break;
+    }
+    if (lowerRemainder.startsWith(`${lowerPrefix}/`)) {
+      remainder = remainder.slice(prefix.length + 1);
+      continue;
+    }
+    break;
+  }
+  remainder = remainder.replace(/^\/+/, "");
+  if (!remainder) {
+    return prefix;
+  }
+  return `${prefix}/${remainder}`;
 }
 
 async function ensureMedia(playback: Playback) {
@@ -257,9 +284,8 @@ async function ensureMedia(playback: Playback) {
     throw new Error("Media files must be inside ASTERISK_SOUNDS_ROOT");
   }
   const sanitizedPath = relativePath.replace(/^\/+/, "");
-  const prefix = normalizePrefix(config.soundPrefix);
-  const needsPrefix = prefix.length > 0 && sanitizedPath.startsWith(prefix) ? sanitizedPath : `${prefix}${sanitizedPath}`;
-  return `sound:${needsPrefix}`;
+  const resolvedPath = applySoundPrefix(sanitizedPath);
+  return `sound:${resolvedPath}`;
 }
 
 const playbackMediaCache = new Map<string, Promise<string>>();
