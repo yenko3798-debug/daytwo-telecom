@@ -253,24 +253,14 @@ function applySoundPrefix(path: string) {
     return normalizedPath;
   }
   const lowerPrefix = prefix.toLowerCase();
-  let remainder = normalizedPath;
-  while (remainder.length > 0) {
-    const lowerRemainder = remainder.toLowerCase();
-    if (lowerRemainder === lowerPrefix) {
-      remainder = "";
-      break;
-    }
-    if (lowerRemainder.startsWith(`${lowerPrefix}/`)) {
-      remainder = remainder.slice(prefix.length + 1);
-      continue;
-    }
-    break;
+  const lowerPath = normalizedPath.toLowerCase();
+  if (lowerPath === lowerPrefix) {
+    return normalizedPath;
   }
-  remainder = remainder.replace(/^\/+/, "");
-  if (!remainder) {
-    return prefix;
+  if (lowerPath.startsWith(`${lowerPrefix}/`)) {
+    return normalizedPath;
   }
-  return `${prefix}/${remainder}`;
+  return `${prefix}/${normalizedPath}`;
 }
 
 async function ensureMedia(playback: Playback) {
