@@ -375,6 +375,13 @@ async function pause(ms: number) {
   await new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function safeHangup(channel: any, params: Record<string, any> = {}) {
+  if (!channel) return;
+  await new Promise<void>((resolve) => {
+    channel.hangup(params, () => resolve());
+  }).catch(() => {});
+}
+
 function createSessionState(payload: SessionPayload, channel: any) {
   if (!payload.flow) {
     throw new Error("Flow definition missing");
@@ -576,9 +583,7 @@ async function handleBridgeStart(event: any, channel: any) {
   const bridgeId = event.args[2];
   const bridgeState = bridges.get(bridgeId);
   if (!bridgeState) {
-    await new Promise<void>((resolve) => {
-      channel.hangup({}, () => resolve());
-    });
+    await safeHangup(channel);
     return;
   }
   bridgeState.channelId = channel.id;
@@ -597,34 +602,45 @@ async function handleBridgeStart(event: any, channel: any) {
 }
 
 async function handleSessionStart(event: any, channel: any) {
-  const sessionId = event.args[2];
-  const payload = await fetchSession(sessionId);
-  const state = createSessionState(payload, channel);
-  sessionsByChannel.set(channel.id, state);
-  warmFlowMedia(state.flow).catch((error: any) => {
-    console.error(`Media warmup failed: ${error?.message ?? error}`);
-  });
-  await new Promise<void>((resolve, reject) => {
-    channel.answer((error: any) => {
-      if (error) reject(error);
-      else resolve();
-    });
-  });
-  await notifyPanel("call.answered", {
-    sessionId: state.sessionId,
-    channelId: channel.id,
-  });
+  const sessionId = event.args?.[2];
+  let state: SessionState | null = null;
   try {
+    if (!sessionId) {
+      throw new Error("Session identifier missing");
+    }
+    const payload = await fetchSession(sessionId);
+    state = createSessionState(payload, channel);
+    sessionsByChannel.set(channel.id, state);
+    warmFlowMedia(state.flow).catch((error: any) => {
+      console.error(`Media warmup failed: ${error?.message ?? error}`);
+    });
+    await new Promise<void>((resolve, reject) => {
+      channel.answer((error: any) => {
+        if (error) reject(error);
+        else resolve();
+      });
+    });
+    await notifyPanel("call.answered", {
+      sessionId: state.sessionId,
+      channelId: channel.id,
+    });
     await runFlow(state);
   } catch (error: any) {
-    await notifyPanel("call.failed", {
-      sessionId: state.sessionId,
-      error: error?.message ?? String(error),
-    });
-    sessionsByChannel.delete(channel.id);
-    await new Promise<void>((resolve) => {
-      channel.hangup({}, () => resolve());
-    });
+    if (state) {
+      await notifyPanel("call.failed", {
+        sessionId: state.sessionId,
+        channelId: channel.id,
+        error: error?.message ?? String(error),
+      });
+      sessionsByChannel.delete(channel.id);
+    } else if (sessionId) {
+      await notifyPanel("call.canceled", {
+        sessionId,
+        channelId: channel.id,
+        error: error?.message ?? String(error),
+      });
+    }
+    await safeHangup(channel);
   }
 }
 
@@ -655,11 +671,14 @@ async function handleStasisEnd(event: any) {
   if (!state.completionSent) {
     state.completionSent = true;
     const duration = Math.max(0, Math.round((Date.now() - state.startedAt) / 1000));
-    await notifyPanel("call.completed", {
+    const payload = {
       sessionId: state.sessionId,
+      channelId: event.channel.id,
       durationSeconds: duration,
       dtmf: state.digits.length > 0 ? state.digits : undefined,
-    });
+    };
+    const eventName = state.completed ? "call.completed" : "call.hungup";
+    await notifyPanel(eventName, payload);
   }
 }
 

@@ -1,5 +1,4 @@
-import { ReactNode } from 'react'
-import { motion } from 'framer-motion'
+import { type CSSProperties, ReactNode } from 'react'
 import clsx from 'clsx'
 
 type PageFrameProps = {
@@ -29,11 +28,8 @@ export function PageFrame({
         className,
       )}
     >
-      <motion.div
-        initial={{ opacity: 0, y: 24 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.7, ease: 'easeOut' }}
-        className="relative overflow-hidden rounded-[2.75rem] bg-white/70 px-6 py-10 shadow-[0_30px_70px_rgba(15,23,42,0.16)] ring-1 ring-white/60 backdrop-blur-2xl dark:bg-white/10 dark:ring-white/10 sm:px-10 lg:px-14"
+      <div
+        className="lux-fade-up relative overflow-hidden rounded-[2.75rem] bg-white/70 px-6 py-10 shadow-[0_30px_70px_rgba(15,23,42,0.16)] ring-1 ring-white/60 backdrop-blur-2xl transition-opacity dark:bg-white/10 dark:ring-white/10 sm:px-10 lg:px-14"
       >
         <div className="pointer-events-none absolute inset-0">
           <div className="absolute -top-32 left-12 h-64 w-64 rounded-full bg-emerald-400/20 blur-[100px] dark:bg-emerald-500/20" />
@@ -60,7 +56,7 @@ export function PageFrame({
             <div className="flex flex-wrap items-center gap-3">{actions}</div>
           ) : null}
         </div>
-      </motion.div>
+      </div>
       <div className="relative z-10 mt-10 space-y-6">{children}</div>
     </div>
   )
@@ -87,17 +83,15 @@ export function MotionCard({
   tone = 'neutral',
   delay = 0,
 }: MotionCardProps) {
+  const animationStyle: CSSProperties | undefined =
+    delay > 0 ? { animationDelay: `${delay}s` } : undefined
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 24 }}
-      whileInView={{ opacity: 1, y: 0 }}
-      viewport={{ once: true, amount: 0.2 }}
-      transition={{ duration: 0.6, ease: 'easeOut', delay }}
-      whileHover={{ y: -8 }}
+    <div
       className={clsx(
-        'group relative overflow-hidden rounded-[2rem] border border-white/50 bg-white/70 p-6 shadow-[0_24px_60px_rgba(15,23,42,0.15)] backdrop-blur-xl transition-all duration-300 hover:shadow-[0_30px_75px_rgba(15,23,42,0.18)] dark:border-white/10 dark:bg-white/10 dark:shadow-[0_22px_50px_rgba(3,7,18,0.55)]',
+        'lux-fade-up group relative overflow-hidden rounded-[2rem] border border-white/50 bg-white/70 p-6 shadow-[0_24px_60px_rgba(15,23,42,0.15)] backdrop-blur-xl transition-all duration-300 hover:-translate-y-2 hover:shadow-[0_30px_75px_rgba(15,23,42,0.18)] dark:border-white/10 dark:bg-white/10 dark:shadow-[0_22px_50px_rgba(3,7,18,0.55)] transform-gpu',
         className,
       )}
+      style={animationStyle}
     >
       <span
         className={clsx(
@@ -107,7 +101,7 @@ export function MotionCard({
         )}
       />
       <div className="relative z-10">{children}</div>
-    </motion.div>
+    </div>
   )
 }
 
