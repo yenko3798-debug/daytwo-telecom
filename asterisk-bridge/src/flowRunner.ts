@@ -146,8 +146,20 @@ let client: any;
 const sessionsByChannel = new Map<string, SessionState>();
 const bridges = new Map<string, BridgeState>();
 
+function resolveMediaUrl(raw: string) {
+  if (!raw || raw.trim().length === 0) {
+    throw new Error("Playback URL is missing");
+  }
+  const resolved = new URL(raw, `${config.panelBaseUrl}/`);
+  if (resolved.protocol !== "http:" && resolved.protocol !== "https:") {
+    throw new Error("Playback files must be served over HTTP or HTTPS");
+  }
+  return resolved.toString();
+}
+
 async function downloadToCache(url: string) {
-  const key = hashKey(url);
+  const absoluteUrl = resolveMediaUrl(url);
+  const key = hashKey(absoluteUrl);
   const extensionMatch = url.match(/\.(wav|ulaw|sln16|gsm|mp3|ogg)(\?.*)?$/i);
   const extension = extensionMatch ? extensionMatch[1].toLowerCase() : "wav";
   const file = join(config.cacheDir, `${key}.${extension}`);
@@ -155,9 +167,9 @@ async function downloadToCache(url: string) {
     await fs.access(file);
     return file;
   } catch {
-    const response = await fetch(url);
+    const response = await fetch(absoluteUrl);
     if (!response.ok) {
-      throw new Error(`Unable to download media ${url}`);
+      throw new Error(`Unable to download media ${absoluteUrl}`);
     }
     const arrayBuffer = await response.arrayBuffer();
     await fs.writeFile(file, Buffer.from(arrayBuffer));
@@ -266,7 +278,8 @@ const playbackMediaCache = new Map<string, Promise<string>>();
 
 function playbackCacheKey(playback: Playback) {
   if (playback.mode === "file") {
-    return `file:${playback.url}`;
+    const absoluteUrl = resolveMediaUrl(playback.url);
+    return `file:${absoluteUrl}`;
   }
   return `tts:${playback.language ?? ""}:${playback.voice ?? ""}:${playback.text}`;
 }
