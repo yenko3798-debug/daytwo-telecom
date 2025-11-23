@@ -231,7 +231,8 @@ async function ensureNormalizedVariants(file: string) {
   const base = file.replace(/\.[^/.]+$/, "");
   const wavPath = `${base}.wav`;
   const ulawPath = `${base}.ulaw`;
-  if (!(await fileExists(wavPath))) {
+  const needsWav = !(await fileExists(wavPath)) || file === wavPath;
+  if (needsWav) {
     await normalizeToWav(file, wavPath);
   }
   if (!(await fileExists(ulawPath))) {
@@ -242,8 +243,24 @@ async function ensureNormalizedVariants(file: string) {
 
 function normalizePrefix(value?: string) {
   if (!value) return "";
-  const trimmed = value.trim().replace(/^\/+|\/+$/g, "");
-  return trimmed.length ? `${trimmed}/` : "";
+  return value.trim().replace(/^\/+|\/+$/g, "");
+}
+
+function applySoundPrefix(path: string) {
+  const normalizedPath = path.replace(/^\/+/, "");
+  const prefix = normalizePrefix(config.soundPrefix);
+  if (!prefix) {
+    return normalizedPath;
+  }
+  const lowerPrefix = prefix.toLowerCase();
+  const lowerPath = normalizedPath.toLowerCase();
+  if (lowerPath === lowerPrefix) {
+    return normalizedPath;
+  }
+  if (lowerPath.startsWith(`${lowerPrefix}/`)) {
+    return normalizedPath;
+  }
+  return `${prefix}/${normalizedPath}`;
 }
 
 async function ensureMedia(playback: Playback) {
@@ -257,9 +274,8 @@ async function ensureMedia(playback: Playback) {
     throw new Error("Media files must be inside ASTERISK_SOUNDS_ROOT");
   }
   const sanitizedPath = relativePath.replace(/^\/+/, "");
-  const prefix = normalizePrefix(config.soundPrefix);
-  const needsPrefix = prefix.length > 0 && sanitizedPath.startsWith(prefix) ? sanitizedPath : `${prefix}${sanitizedPath}`;
-  return `sound:${needsPrefix}`;
+  const resolvedPath = applySoundPrefix(sanitizedPath);
+  return `sound:${resolvedPath}`;
 }
 
 const playbackMediaCache = new Map<string, Promise<string>>();
@@ -373,6 +389,13 @@ async function playMedia(channel: any, media: string) {
 
 async function pause(ms: number) {
   await new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function safeHangup(channel: any, params: Record<string, any> = {}) {
+  if (!channel) return;
+  await new Promise<void>((resolve) => {
+    channel.hangup(params, () => resolve());
+  }).catch(() => {});
 }
 
 function createSessionState(payload: SessionPayload, channel: any) {
@@ -576,9 +599,7 @@ async function handleBridgeStart(event: any, channel: any) {
   const bridgeId = event.args[2];
   const bridgeState = bridges.get(bridgeId);
   if (!bridgeState) {
-    await new Promise<void>((resolve) => {
-      channel.hangup({}, () => resolve());
-    });
+    await safeHangup(channel);
     return;
   }
   bridgeState.channelId = channel.id;
@@ -597,34 +618,45 @@ async function handleBridgeStart(event: any, channel: any) {
 }
 
 async function handleSessionStart(event: any, channel: any) {
-  const sessionId = event.args[2];
-  const payload = await fetchSession(sessionId);
-  const state = createSessionState(payload, channel);
-  sessionsByChannel.set(channel.id, state);
-  warmFlowMedia(state.flow).catch((error: any) => {
-    console.error(`Media warmup failed: ${error?.message ?? error}`);
-  });
-  await new Promise<void>((resolve, reject) => {
-    channel.answer((error: any) => {
-      if (error) reject(error);
-      else resolve();
-    });
-  });
-  await notifyPanel("call.answered", {
-    sessionId: state.sessionId,
-    channelId: channel.id,
-  });
+  const sessionId = event.args?.[2];
+  let state: SessionState | null = null;
   try {
+    if (!sessionId) {
+      throw new Error("Session identifier missing");
+    }
+    const payload = await fetchSession(sessionId);
+    state = createSessionState(payload, channel);
+    sessionsByChannel.set(channel.id, state);
+    warmFlowMedia(state.flow).catch((error: any) => {
+      console.error(`Media warmup failed: ${error?.message ?? error}`);
+    });
+    await new Promise<void>((resolve, reject) => {
+      channel.answer((error: any) => {
+        if (error) reject(error);
+        else resolve();
+      });
+    });
+    await notifyPanel("call.answered", {
+      sessionId: state.sessionId,
+      channelId: channel.id,
+    });
     await runFlow(state);
   } catch (error: any) {
-    await notifyPanel("call.failed", {
-      sessionId: state.sessionId,
-      error: error?.message ?? String(error),
-    });
-    sessionsByChannel.delete(channel.id);
-    await new Promise<void>((resolve) => {
-      channel.hangup({}, () => resolve());
-    });
+    if (state) {
+      await notifyPanel("call.failed", {
+        sessionId: state.sessionId,
+        channelId: channel.id,
+        error: error?.message ?? String(error),
+      });
+      sessionsByChannel.delete(channel.id);
+    } else if (sessionId) {
+      await notifyPanel("call.canceled", {
+        sessionId,
+        channelId: channel.id,
+        error: error?.message ?? String(error),
+      });
+    }
+    await safeHangup(channel);
   }
 }
 
@@ -655,11 +687,14 @@ async function handleStasisEnd(event: any) {
   if (!state.completionSent) {
     state.completionSent = true;
     const duration = Math.max(0, Math.round((Date.now() - state.startedAt) / 1000));
-    await notifyPanel("call.completed", {
+    const payload = {
       sessionId: state.sessionId,
+      channelId: event.channel.id,
       durationSeconds: duration,
       dtmf: state.digits.length > 0 ? state.digits : undefined,
-    });
+    };
+    const eventName = state.completed ? "call.completed" : "call.hungup";
+    await notifyPanel(eventName, payload);
   }
 }
 
