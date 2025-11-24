@@ -33,6 +33,7 @@ const ringTimeout = Number.parseInt(optionalEnv("DEFAULT_RING_TIMEOUT") ?? "45",
 const dialTimeout = Number.parseInt(optionalEnv("DEFAULT_DIAL_TIMEOUT") ?? "30", 10);
 
 const panelBaseUrl = requireEnv("PANEL_BASE_URL").replace(/\/$/, "");
+const mediaBaseUrl = (optionalEnv("MEDIA_BASE_URL") ?? panelBaseUrl).replace(/\/$/, "");
 const panelWebhookUrl = requireEnv("PANEL_WEBHOOK_URL");
 const ariBaseUrl = requireEnv("ARI_BASE_URL").replace(/\/$/, "");
 const pjsipDir = resolve(requireEnv("ASTERISK_PJSIP_DIR"));
@@ -50,6 +51,7 @@ export const config = {
   httpPort,
   bridgeToken: requireEnv("BRIDGE_TOKEN"),
   panelBaseUrl,
+  mediaBaseUrl,
   panelAriToken: requireEnv("PANEL_ARI_TOKEN"),
   panelWebhookUrl,
   ariBaseUrl,

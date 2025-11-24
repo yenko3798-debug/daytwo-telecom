@@ -9,6 +9,54 @@ function rawLineFromMetadata(metadata: Prisma.JsonValue | null) {
   return typeof raw === "string" ? raw : null;
 }
 
+const CACHE_TTL_MS = 2000;
+type CallsCacheEntry = {
+  expires: number;
+  data: any | null;
+  promise?: Promise<any>;
+};
+const callsCache = new Map<string, CallsCacheEntry>();
+
+function cacheKey(userId: string, search: string) {
+  return `${userId}:${search}`;
+}
+
+async function fetchCalls(where: Prisma.CallSessionWhereInput, limit: number) {
+  const calls = await prisma.callSession.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    take: limit,
+    include: {
+      campaign: { select: { id: true, name: true } },
+      lead: {
+        select: {
+          phoneNumber: true,
+          normalizedNumber: true,
+          metadata: true,
+        },
+      },
+    },
+  });
+  return calls.map((call) => ({
+    id: call.id,
+    status: call.status.toLowerCase(),
+    callerId: call.callerId,
+    dialedNumber: call.dialedNumber,
+    durationSeconds: call.durationSeconds,
+    costCents: call.costCents,
+    dtmf: call.dtmf,
+    createdAt: call.createdAt,
+    campaign: call.campaign,
+    lead: call.lead
+      ? {
+          phoneNumber: call.lead.phoneNumber,
+          normalizedNumber: call.lead.normalizedNumber,
+          rawLine: rawLineFromMetadata(call.lead.metadata),
+        }
+      : null,
+  }));
+}
+
 export async function GET(req: Request) {
   const session = await getSession();
   if (!session) {
@@ -16,7 +64,7 @@ export async function GET(req: Request) {
   }
 
   const url = new URL(req.url);
-  const limit = Math.min(Math.max(parseInt(url.searchParams.get("limit") ?? "200", 10), 1), 500);
+  const limit = Math.min(Math.max(parseInt(url.searchParams.get("limit") ?? "120", 10), 1), 200);
   const status = url.searchParams.get("status");
   const campaignId = url.searchParams.get("campaignId");
   const q = url.searchParams.get("q")?.trim();
@@ -53,40 +101,34 @@ export async function GET(req: Request) {
     ];
   }
 
-  const calls = await prisma.callSession.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-    take: limit,
-    include: {
-      campaign: { select: { id: true, name: true } },
-      lead: {
-        select: {
-          phoneNumber: true,
-          normalizedNumber: true,
-          metadata: true,
-        },
-      },
-    },
-  });
-
-  return NextResponse.json({
-    calls: calls.map((call) => ({
-      id: call.id,
-      status: call.status.toLowerCase(),
-      callerId: call.callerId,
-      dialedNumber: call.dialedNumber,
-      durationSeconds: call.durationSeconds,
-      costCents: call.costCents,
-      dtmf: call.dtmf,
-      createdAt: call.createdAt,
-      campaign: call.campaign,
-      lead: call.lead
-        ? {
-            phoneNumber: call.lead.phoneNumber,
-            normalizedNumber: call.lead.normalizedNumber,
-            rawLine: rawLineFromMetadata(call.lead.metadata),
-          }
-        : null,
-    })),
-  });
+  const key = cacheKey(session.sub, url.searchParams.toString());
+  const now = Date.now();
+  const cached = callsCache.get(key);
+  if (cached && cached.expires > now && cached.data) {
+    return NextResponse.json({ calls: cached.data });
+  }
+  if (cached?.promise) {
+    try {
+      const data = await cached.promise;
+      return NextResponse.json({ calls: data });
+    } catch (error: any) {
+      return NextResponse.json({ error: error?.message ?? "Unable to load calls" }, { status: 500 });
+    }
+  }
+  const promise = fetchCalls(where, limit)
+    .then((data) => {
+      callsCache.set(key, { expires: Date.now() + CACHE_TTL_MS, data });
+      return data;
+    })
+    .catch((error) => {
+      callsCache.delete(key);
+      throw error;
+    });
+  callsCache.set(key, { expires: 0, data: cached?.data ?? null, promise });
+  try {
+    const data = await promise;
+    return NextResponse.json({ calls: data });
+  } catch (error: any) {
+    return NextResponse.json({ error: error?.message ?? "Unable to load calls" }, { status: 500 });
+  }
 }

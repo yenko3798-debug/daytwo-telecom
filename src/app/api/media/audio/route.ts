@@ -53,10 +53,13 @@ export async function POST(req: Request) {
   const targetPath = path.join(uploadsRoot, fileName);
   await fs.writeFile(targetPath, buffer);
 
-  const url = `/uploads/audio/${fileName}`;
+  const publicBase = process.env.APP_URL?.replace(/\/$/, "");
+  const relativePath = `/uploads/audio/${fileName}`;
+  const absoluteUrl = publicBase ? `${publicBase}${relativePath}` : null;
   return NextResponse.json(
     {
-      url,
+      url: relativePath,
+      publicUrl: absoluteUrl,
       originalName,
       mimeType: file.type || null,
       size: buffer.length,
