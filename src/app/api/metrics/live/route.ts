@@ -12,35 +12,27 @@ function maskNumber(value: string | null, enabled: boolean) {
 
 type ScopeType = "me" | "public" | "admin";
 
-export async function GET(req: Request) {
-  const url = new URL(req.url);
-  const scope = (url.searchParams.get("scope") as ScopeType) ?? "me";
-  const rangeHours = Math.min(Math.max(parseInt(url.searchParams.get("range") ?? "24", 10), 1), 168);
-  const since = dayjs().subtract(rangeHours, "hour").toDate();
-  const sinceMinute = dayjs().subtract(1, "minute").toDate();
+const CACHE_TTL_MS = 3000;
+type MetricsCacheEntry = {
+  expires: number;
+  data: any | null;
+  promise?: Promise<any>;
+};
+const metricsCache = new Map<string, MetricsCacheEntry>();
 
-  let userId: string | null = null;
-  let requireAuth = scope !== "public";
-  let requireAdmin = scope === "admin";
+function cacheKey(scope: ScopeType, userId: string | null, rangeHours: number) {
+  return `${scope}:${userId ?? "global"}:${rangeHours}`;
+}
 
-  if (requireAuth) {
-    const session = await getSession();
-    if (!session) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    if (requireAdmin) {
-      const role = session.role;
-      if (role !== "admin" && role !== "superadmin") {
-        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-      }
-    } else {
-      userId = session.sub;
-    }
-  }
-
-  const campaignWhere = userId ? { userId } : undefined;
-  const callWhere = userId ? { campaign: { userId } } : undefined;
-
+async function computeMetrics(
+  campaignWhere: Parameters<typeof prisma.campaign.groupBy>[0]["where"],
+  callWhere: Parameters<typeof prisma.callSession.count>[0]["where"],
+  since: Date,
+  sinceMinute: Date,
+  shouldMask: boolean,
+  scope: ScopeType,
+  rangeHours: number
+) {
   const [
     campaignStats,
     callTotal,
@@ -53,7 +45,7 @@ export async function GET(req: Request) {
     leadTotals,
     dtmfSamples,
     feed,
-  ] = await Promise.all([
+  ] = await prisma.$transaction([
     prisma.campaign.groupBy({
       by: ["status"],
       _count: { _all: true },
@@ -156,8 +148,6 @@ export async function GET(req: Request) {
     return acc;
   }, {});
 
-  const shouldMask = scope === "public";
-
   const feedItems = feed.map((call) => {
     const leadMeta =
       call.lead?.metadata && typeof call.lead.metadata === "object" && !Array.isArray(call.lead.metadata)
@@ -182,7 +172,7 @@ export async function GET(req: Request) {
     };
   });
 
-  return NextResponse.json({
+  return {
     timestamp: new Date().toISOString(),
     scope,
     rangeHours,
@@ -206,5 +196,67 @@ export async function GET(req: Request) {
       .map(([digit, count]) => ({ digit, count }))
       .sort((a, b) => b.count - a.count),
     feed: feedItems,
-  });
+  };
+}
+
+export async function GET(req: Request) {
+  const url = new URL(req.url);
+  const scope = (url.searchParams.get("scope") as ScopeType) ?? "me";
+  const rangeHours = Math.min(Math.max(parseInt(url.searchParams.get("range") ?? "24", 10), 1), 168);
+  const since = dayjs().subtract(rangeHours, "hour").toDate();
+  const sinceMinute = dayjs().subtract(1, "minute").toDate();
+
+  let userId: string | null = null;
+  let requireAuth = scope !== "public";
+  let requireAdmin = scope === "admin";
+
+  if (requireAuth) {
+    const session = await getSession();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+    if (requireAdmin) {
+      const role = session.role;
+      if (role !== "admin" && role !== "superadmin") {
+        return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+      }
+    } else {
+      userId = session.sub;
+    }
+  }
+
+  const campaignWhere = userId ? { userId } : undefined;
+  const callWhere = userId ? { campaign: { userId } } : undefined;
+
+  const shouldMask = scope === "public";
+  const key = cacheKey(scope, userId, rangeHours);
+  const now = Date.now();
+  const cached = metricsCache.get(key);
+  if (cached && cached.expires > now && cached.data) {
+    return NextResponse.json(cached.data);
+  }
+  if (cached?.promise) {
+    try {
+      const data = await cached.promise;
+      return NextResponse.json(data);
+    } catch (error: any) {
+      return NextResponse.json({ error: error?.message ?? "Unable to load metrics" }, { status: 500 });
+    }
+  }
+  const promise = computeMetrics(campaignWhere, callWhere, since, sinceMinute, shouldMask, scope, rangeHours)
+    .then((data) => {
+      metricsCache.set(key, { expires: Date.now() + CACHE_TTL_MS, data });
+      return data;
+    })
+    .catch((error) => {
+      metricsCache.delete(key);
+      throw error;
+    });
+  metricsCache.set(key, { expires: 0, data: cached?.data ?? null, promise });
+  try {
+    const data = await promise;
+    return NextResponse.json(data);
+  } catch (error: any) {
+    return NextResponse.json({ error: error?.message ?? "Unable to load metrics" }, { status: 500 });
+  }
 }
