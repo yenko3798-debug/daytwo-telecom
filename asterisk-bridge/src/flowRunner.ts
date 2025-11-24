@@ -316,30 +316,20 @@ async function ensureNormalizedVariants(sourceFile: string) {
   const baseId = mediaBaseId(sourceFile);
   const storageDir = STATIC_PREFIX.length ? join(STATIC_SOUNDS_ROOT, STATIC_PREFIX) : STATIC_SOUNDS_ROOT;
   await fs.mkdir(storageDir, { recursive: true });
-  const wavPath = join(storageDir, `${baseId}.wav`);
-  const ulawPath = join(storageDir, `${baseId}.ulaw`);
-  if (!(await fileExists(wavPath))) {
-    logger.debug("Creating normalized WAV variant", { sourceFile, wavPath });
-    await normalizeToWav(sourceFile, wavPath);
-  } else {
-    logger.debug("Normalized WAV already exists", { wavPath });
-  }
-  if (!(await fileExists(ulawPath))) {
-    logger.debug("Creating normalized ulaw variant", { wavPath, ulawPath });
-    await convertWavToUlaw(wavPath, ulawPath);
-  } else {
-    logger.debug("Normalized ulaw already exists", { ulawPath });
-  }
-  await ensureNonEmpty(ulawPath);
-  const wavStats = await fs.stat(wavPath).catch(() => null);
-  const ulawStats = await fs.stat(ulawPath).catch(() => null);
+  const target = join(storageDir, `${baseId}.ulaw`);
+  const tempWav = join(storageDir, `${baseId}.norm.wav`);
+  logger.debug("Normalizing audio via sox", { sourceFile, tempWav });
+  await normalizeToWav(sourceFile, tempWav);
+  logger.debug("Converting normalized WAV to ulaw", { tempWav, target });
+  await convertWavToUlaw(tempWav, target);
+  await ensureNonEmpty(target);
+  await fs.rm(tempWav, { force: true }).catch(() => {});
+  const ulawStats = await fs.stat(target).catch(() => null);
   logger.debug("Normalized media ready", {
-    wavPath,
-    wavBytes: wavStats?.size ?? 0,
-    ulawPath,
+    ulawPath: target,
     ulawBytes: ulawStats?.size ?? 0,
   });
-  return { wav: wavPath, ulaw: ulawPath, id: baseId };
+  return { wav: tempWav, ulaw: target, id: baseId };
 }
 
 function normalizePrefix(value?: string) {
