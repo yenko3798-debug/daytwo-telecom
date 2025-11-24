@@ -284,10 +284,16 @@ async function normalizeToWav(input: string, output: string) {
   await fs.rm(tmp, { force: true }).catch(() => {});
   const soxArgs = [input, "-r", "8000", "-c", "1", "-b", "16", "-e", "signed-integer", tmp];
   logger.debug("Normalizing audio via sox", { input, output });
-  if (!(await tryTranscode("sox", soxArgs))) {
+  const soxResult = await tryTranscode("sox", soxArgs);
+  if (!soxResult) {
     const ffmpegArgs = ["-y", "-i", input, "-ar", "8000", "-ac", "1", "-sample_fmt", "s16", tmp];
     logger.debug("Normalizing audio via ffmpeg fallback", { input, output });
-    if (!(await tryTranscode("ffmpeg", ffmpegArgs))) {
+    const ffmpegResult = await tryTranscode("ffmpeg", ffmpegArgs);
+    if (!ffmpegResult) {
+      const soxLog = join(STATIC_CACHE_DIR, "sox-error.log");
+      const ffmpegLog = join(STATIC_CACHE_DIR, "ffmpeg-error.log");
+      await fs.writeFile(soxLog, JSON.stringify({ input, output, soxArgs }, null, 2));
+      await fs.writeFile(ffmpegLog, JSON.stringify({ input, output, ffmpegArgs }, null, 2));
       throw new Error("Unable to normalize audio to 8k mono WAV. Install sox or ffmpeg.");
     }
   }
