@@ -154,13 +154,11 @@ async function convertWavToUlaw(input, output) {
     await fs.rename(tmp, output);
     return output;
 }
+const STATIC_SOUNDS_ROOT = "/usr/share/asterisk/sounds";
+const STATIC_PREFIX = "custom";
 async function ensureNormalizedVariants(sourceFile) {
     const baseId = mediaBaseId(sourceFile);
-    const prefixSegment = normalizePrefix(config.soundPrefix).replace(/\/+$/, "");
-    const normalizedRoot = config.soundsRoot.replace(/\\/g, "/").replace(/\/+$/, "");
-    const storageDir = prefixSegment.length > 0 && !normalizedRoot.endsWith(`/${prefixSegment}`)
-        ? join(config.soundsRoot, prefixSegment)
-        : config.soundsRoot;
+    const storageDir = join(STATIC_SOUNDS_ROOT, STATIC_PREFIX);
     await fs.mkdir(storageDir, { recursive: true });
     const wavPath = join(storageDir, `${baseId}.wav`);
     const ulawPath = join(storageDir, `${baseId}.ulaw`);
