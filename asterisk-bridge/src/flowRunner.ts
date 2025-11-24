@@ -1,6 +1,6 @@
 import AriClient from "ari-client";
 import { promises as fs } from "fs";
-import { basename, join, relative } from "path";
+import { basename, dirname, join, relative } from "path";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { config } from "./config.js";
@@ -297,13 +297,10 @@ async function convertWavToUlaw(input: string, output: string) {
 async function ensureNormalizedVariants(sourceFile: string) {
   const baseId = mediaBaseId(sourceFile);
   const prefixSegment = normalizePrefix(config.soundPrefix).replace(/\/+$/, "");
-  const normalizedRoot = config.soundsRoot.replace(/\\/g, "/").replace(/\/+$/, "");
-  const prefixAlreadyIncluded =
-    prefixSegment.length > 0 && normalizedRoot.endsWith(`/${prefixSegment}`);
-  const storageDir =
-    prefixSegment.length === 0 || prefixAlreadyIncluded
-      ? config.soundsRoot
-      : join(config.soundsRoot, prefixSegment);
+  const defaultDir = prefixSegment.length > 0 ? join(config.soundsRoot, prefixSegment) : config.soundsRoot;
+  const relativeToRoot = relative(config.soundsRoot, sourceFile).replace(/\\/g, "/");
+  const withinRoot = relativeToRoot.length > 0 && !relativeToRoot.startsWith("..");
+  const storageDir = withinRoot ? dirname(sourceFile) : defaultDir;
   await fs.mkdir(storageDir, { recursive: true });
   const wavPath = join(storageDir, `${baseId}.wav`);
   const ulawPath = join(storageDir, `${baseId}.ulaw`);
