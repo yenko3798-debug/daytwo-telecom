@@ -12,6 +12,8 @@ const STATIC_PREFIX = "custom";
 const STATIC_CACHE_DIR = "/var/lib/asterisk/media-cache";
 let staticDirsReady = null;
 const normalizationTasks = new Map();
+const SOX_BIN = process.env.SOX_BIN || "/usr/bin/sox";
+const FFMPEG_BIN = process.env.FFMPEG_BIN || "/usr/bin/ffmpeg";
 function ensureStaticDirs() {
     if (!staticDirsReady) {
         staticDirsReady = (async () => {
@@ -123,12 +125,19 @@ async function synthesizeTts(text, voice, language) {
         return file;
     }
 }
-async function tryTranscode(command, args) {
+async function tryTranscode(command, args, label) {
     try {
         await execFileAsync(command, args);
         return true;
     }
-    catch {
+    catch (error) {
+        logger.error(label, {
+            command,
+            args,
+            error: error?.message ?? error,
+            stderr: error?.stderr,
+            stdout: error?.stdout,
+        });
         return false;
     }
 }
@@ -145,12 +154,12 @@ async function normalizeToWav(input, output) {
     const tmp = `${output}.tmp`;
     await fs.rm(tmp, { force: true }).catch(() => { });
     const soxArgs = [input, "-r", "8000", "-c", "1", "-b", "16", "-e", "signed-integer", tmp];
-    logger.debug("Normalizing audio via sox", { input, output });
-    const soxResult = await tryTranscode("sox", soxArgs);
+    logger.debug("Normalizing audio via sox", { input, output, binary: SOX_BIN });
+    const soxResult = await tryTranscode(SOX_BIN, soxArgs, "sox normalize");
     if (!soxResult) {
         const ffmpegArgs = ["-y", "-i", input, "-ar", "8000", "-ac", "1", "-sample_fmt", "s16", tmp];
-        logger.debug("Normalizing audio via ffmpeg fallback", { input, output });
-        const ffmpegResult = await tryTranscode("ffmpeg", ffmpegArgs);
+        logger.debug("Normalizing audio via ffmpeg fallback", { input, output, binary: FFMPEG_BIN });
+        const ffmpegResult = await tryTranscode(FFMPEG_BIN, ffmpegArgs, "ffmpeg normalize");
         if (!ffmpegResult) {
             const soxLog = join(STATIC_CACHE_DIR, "sox-error.log");
             const ffmpegLog = join(STATIC_CACHE_DIR, "ffmpeg-error.log");
@@ -166,11 +175,11 @@ async function convertWavToUlaw(input, output) {
     const tmp = `${output}.tmp`;
     await fs.rm(tmp, { force: true }).catch(() => { });
     const soxArgs = [input, "-t", "ulaw", "-r", "8000", "-c", "1", tmp];
-    logger.debug("Converting WAV to ulaw via sox", { input, output });
-    if (!(await tryTranscode("sox", soxArgs))) {
+    logger.debug("Converting WAV to ulaw via sox", { input, output, binary: SOX_BIN });
+    if (!(await tryTranscode(SOX_BIN, soxArgs, "sox ulaw"))) {
         const ffmpegArgs = ["-y", "-i", input, "-ar", "8000", "-ac", "1", "-f", "mulaw", tmp];
-        logger.debug("Converting WAV to ulaw via ffmpeg fallback", { input, output });
-        if (!(await tryTranscode("ffmpeg", ffmpegArgs))) {
+        logger.debug("Converting WAV to ulaw via ffmpeg fallback", { input, output, binary: FFMPEG_BIN });
+        if (!(await tryTranscode(FFMPEG_BIN, ffmpegArgs, "ffmpeg ulaw"))) {
             throw new Error("Unable to convert audio to ulaw. Install sox or ffmpeg.");
         }
     }
