@@ -258,14 +258,39 @@ class ChannelGoneError extends Error {
 function normalizeErrorMessage(error) {
     if (!error)
         return "";
-    if (typeof error === "string")
-        return error;
-    if (typeof error.message === "string")
+    if (error instanceof ChannelGoneError)
         return error.message;
-    if (typeof error.reason === "string")
-        return error.reason;
-    if (typeof error.cause === "string")
-        return error.cause;
+    if (typeof error === "string") {
+        const trimmed = error.trim();
+        if (trimmed.startsWith("{") && trimmed.endsWith("}")) {
+            try {
+                const parsed = JSON.parse(trimmed);
+                const nested = normalizeErrorMessage(parsed);
+                return nested || trimmed;
+            }
+            catch {
+                return trimmed;
+            }
+        }
+        return trimmed;
+    }
+    if (typeof error === "object") {
+        const message = error.message;
+        if (typeof message === "string")
+            return message;
+        const reason = error.reason;
+        if (typeof reason === "string")
+            return reason;
+        const cause = error.cause;
+        if (typeof cause === "string")
+            return cause;
+        const err = error.error;
+        if (typeof err === "string")
+            return err;
+        const body = error.body;
+        if (typeof body === "string")
+            return normalizeErrorMessage(body);
+    }
     return String(error);
 }
 function matchesChannelGone(text) {
@@ -291,6 +316,14 @@ function isChannelGoneError(error) {
     if (error instanceof ChannelGoneError)
         return true;
     return error.code === "CHANNEL_GONE" || matchesChannelGone(normalizeErrorMessage(error));
+}
+function sessionIdFromStasisEvent(event) {
+    if (!event?.args || event.args.length === 0)
+        return undefined;
+    if (event.args[0] === "bridge") {
+        return event.args[1];
+    }
+    return event.args[2];
 }
 function playbackCacheKey(playback) {
     if (playback.mode === "file") {
@@ -834,6 +867,26 @@ export async function startFlowRunner() {
             }
         }
         catch (error) {
+            const reason = normalizeErrorMessage(error);
+            if (isChannelGoneError(error) || matchesChannelGone(reason)) {
+                const sessionId = sessionIdFromStasisEvent(event);
+                logger.info("StasisStart aborted due to missing channel", {
+                    sessionId,
+                    channelId: channel?.id,
+                    reason,
+                });
+                if (sessionId) {
+                    await notifyPanel("call.hungup", {
+                        sessionId,
+                        channelId: channel?.id ?? null,
+                        reason: reason || "Channel not found",
+                    });
+                }
+                if (channel) {
+                    await hangupChannel(channel);
+                }
+                return;
+            }
             logger.error("StasisStart handler error", { error: error?.message ?? error });
         }
     });
