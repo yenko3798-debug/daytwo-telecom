@@ -248,6 +248,50 @@ async function ensureMedia(playback) {
     return media;
 }
 const playbackMediaCache = new Map();
+class ChannelGoneError extends Error {
+    constructor(message) {
+        super(message);
+        this.name = "ChannelGoneError";
+        this.code = "CHANNEL_GONE";
+    }
+}
+function normalizeErrorMessage(error) {
+    if (!error)
+        return "";
+    if (typeof error === "string")
+        return error;
+    if (typeof error.message === "string")
+        return error.message;
+    if (typeof error.reason === "string")
+        return error.reason;
+    if (typeof error.cause === "string")
+        return error.cause;
+    return String(error);
+}
+function matchesChannelGone(text) {
+    const lower = text.toLowerCase();
+    return (lower.includes("channel not found") ||
+        lower.includes("no such channel") ||
+        lower.includes("channel is dead") ||
+        lower.includes("hung up") ||
+        lower === "hangup");
+}
+function asChannelGoneError(error, fallback) {
+    if (error instanceof ChannelGoneError)
+        return error;
+    const message = normalizeErrorMessage(error) || fallback;
+    if (message && matchesChannelGone(message)) {
+        return new ChannelGoneError(message);
+    }
+    return null;
+}
+function isChannelGoneError(error) {
+    if (!error)
+        return false;
+    if (error instanceof ChannelGoneError)
+        return true;
+    return error.code === "CHANNEL_GONE" || matchesChannelGone(normalizeErrorMessage(error));
+}
 function playbackCacheKey(playback) {
     if (playback.mode === "file") {
         const absoluteUrl = resolveMediaUrl(playback.url);
@@ -298,6 +342,35 @@ function normalizeHangupCause(reason) {
     }
     return undefined;
 }
+async function answerChannel(channel) {
+    return new Promise((resolve, reject) => {
+        channel.answer((error) => {
+            if (error) {
+                reject(asChannelGoneError(error) ?? error);
+            }
+            else {
+                resolve();
+            }
+        });
+    });
+}
+async function addChannelToBridge(bridge, channelId) {
+    return new Promise((resolve, reject) => {
+        bridge.addChannel({ channel: channelId }, (error) => {
+            if (error) {
+                reject(asChannelGoneError(error) ?? error);
+            }
+            else {
+                resolve();
+            }
+        });
+    });
+}
+async function hangupChannel(channel, params = {}) {
+    await new Promise((resolve) => {
+        channel.hangup(params, () => resolve());
+    }).catch(() => { });
+}
 async function warmFlowMedia(flow) {
     const tasks = [];
     for (const node of flow.nodes) {
@@ -347,8 +420,19 @@ async function playMedia(channel, media) {
         logger.debug("Starting channel playback", { channelId: channel.id, media });
         channel.play({ media }, (error, playback) => {
             if (error) {
-                logger.warn("Playback start failed", { channelId: channel.id, media, error: error?.message ?? error });
-                reject(error);
+                const gone = asChannelGoneError(error);
+                if (gone) {
+                    logger.info("Playback aborted due to missing channel", {
+                        channelId: channel.id,
+                        media,
+                        error: gone.message,
+                    });
+                    reject(gone);
+                }
+                else {
+                    logger.warn("Playback start failed", { channelId: channel.id, media, error: error?.message ?? error });
+                    reject(error);
+                }
                 return;
             }
             playback.once("PlaybackFinished", () => {
@@ -360,6 +444,17 @@ async function playMedia(channel, media) {
                 resolve();
             });
             playback.once("PlaybackFailed", (event) => {
+                const cause = event?.cause ?? event?.message;
+                const gone = asChannelGoneError(cause);
+                if (gone) {
+                    logger.info("Playback stopped because channel went away", {
+                        channelId: channel.id,
+                        media,
+                        cause,
+                    });
+                    reject(gone);
+                    return;
+                }
                 logger.warn("Playback failed mid-stream", { channelId: channel.id, media, event });
                 reject(new Error(event?.cause ?? "Playback failed"));
             });
@@ -589,29 +684,35 @@ async function handleBridgeStart(event, channel) {
     const bridgeState = bridges.get(bridgeId);
     if (!bridgeState) {
         logger.debug("Bridge channel arrived with unknown bridge", { sessionId, bridgeId, channelId: channel.id });
-        await new Promise((resolve) => {
-            channel.hangup({}, () => resolve());
-        });
+        await hangupChannel(channel);
         return;
     }
     logger.debug("Bridge channel joining", { sessionId, bridgeId, channelId: channel.id });
     bridgeState.channelId = channel.id;
-    await new Promise((resolve, reject) => {
-        channel.answer((error) => {
-            if (error)
-                reject(error);
-            else
-                resolve();
-        });
-    });
-    await new Promise((resolve, reject) => {
-        bridgeState.bridge.addChannel({ channel: channel.id }, (error) => {
-            if (error)
-                reject(error);
-            else
-                resolve();
-        });
-    });
+    try {
+        await answerChannel(channel);
+        await addChannelToBridge(bridgeState.bridge, channel.id);
+    }
+    catch (error) {
+        if (isChannelGoneError(error)) {
+            logger.info("Bridge channel ended before joining", {
+                sessionId,
+                bridgeId,
+                channelId: channel.id,
+                reason: normalizeErrorMessage(error),
+            });
+        }
+        else {
+            logger.warn("Bridge channel failed to join", {
+                sessionId,
+                bridgeId,
+                channelId: channel.id,
+                error: error?.message ?? error,
+            });
+        }
+        bridgeState.reject(error);
+        await hangupChannel(channel);
+    }
 }
 async function handleSessionStart(event, channel) {
     const sessionId = event.args[2];
@@ -623,14 +724,24 @@ async function handleSessionStart(event, channel) {
     warmFlowMedia(state.flow).catch((error) => {
         logger.warn("Media warmup failed", { sessionId: state.sessionId, error: error?.message ?? error });
     });
-    await new Promise((resolve, reject) => {
-        channel.answer((error) => {
-            if (error)
-                reject(error);
-            else
-                resolve();
-        });
-    });
+    try {
+        await answerChannel(channel);
+    }
+    catch (error) {
+        sessionsByChannel.delete(channel.id);
+        if (isChannelGoneError(error)) {
+            log.info("Channel ended before answer", { reason: normalizeErrorMessage(error) });
+            state.completed = true;
+            state.completionSent = true;
+            await notifyPanel("call.hungup", {
+                sessionId: state.sessionId,
+                channelId: channel.id,
+                reason: normalizeErrorMessage(error) || "Channel not found",
+            });
+            return;
+        }
+        throw error;
+    }
     await notifyPanel("call.answered", {
         sessionId: state.sessionId,
         channelId: channel.id,
@@ -640,15 +751,29 @@ async function handleSessionStart(event, channel) {
         await runFlow(state);
     }
     catch (error) {
-        log.error("Flow execution failed", { error: error?.message ?? error });
-        await notifyPanel("call.failed", {
-            sessionId: state.sessionId,
-            error: error?.message ?? String(error),
-        });
+        const reason = normalizeErrorMessage(error) || "Flow execution failed";
+        if (isChannelGoneError(error)) {
+            log.info("Channel ended during flow", { reason });
+            state.completed = true;
+            state.completionSent = true;
+            await notifyPanel("call.hungup", {
+                sessionId: state.sessionId,
+                channelId: state.channelId,
+                reason,
+            });
+        }
+        else {
+            log.error("Flow execution failed", { error: error?.message ?? error });
+            await notifyPanel("call.failed", {
+                sessionId: state.sessionId,
+                channelId: state.channelId,
+                error: error?.message ?? String(error),
+            });
+            state.completed = true;
+            state.completionSent = true;
+        }
         sessionsByChannel.delete(channel.id);
-        await new Promise((resolve) => {
-            channel.hangup({}, () => resolve());
-        });
+        await hangupChannel(channel);
     }
 }
 function handleDtmf(event) {

@@ -399,6 +399,50 @@ async function ensureMedia(playback: Playback) {
 
 const playbackMediaCache = new Map<string, Promise<string>>();
 
+class ChannelGoneError extends Error {
+  code: string;
+  constructor(message: string) {
+    super(message);
+    this.name = "ChannelGoneError";
+    this.code = "CHANNEL_GONE";
+  }
+}
+
+function normalizeErrorMessage(error: any) {
+  if (!error) return "";
+  if (typeof error === "string") return error;
+  if (typeof error.message === "string") return error.message;
+  if (typeof error.reason === "string") return error.reason;
+  if (typeof error.cause === "string") return error.cause;
+  return String(error);
+}
+
+function matchesChannelGone(text: string) {
+  const lower = text.toLowerCase();
+  return (
+    lower.includes("channel not found") ||
+    lower.includes("no such channel") ||
+    lower.includes("channel is dead") ||
+    lower.includes("hung up") ||
+    lower === "hangup"
+  );
+}
+
+function asChannelGoneError(error: any, fallback?: string) {
+  if (error instanceof ChannelGoneError) return error;
+  const message = normalizeErrorMessage(error) || fallback;
+  if (message && matchesChannelGone(message)) {
+    return new ChannelGoneError(message);
+  }
+  return null;
+}
+
+function isChannelGoneError(error: any): error is ChannelGoneError {
+  if (!error) return false;
+  if (error instanceof ChannelGoneError) return true;
+  return error.code === "CHANNEL_GONE" || matchesChannelGone(normalizeErrorMessage(error));
+}
+
 function playbackCacheKey(playback: Playback) {
   if (playback.mode === "file") {
     const absoluteUrl = resolveMediaUrl(playback.url);
@@ -451,6 +495,36 @@ function normalizeHangupCause(reason?: string | number) {
   return undefined;
 }
 
+async function answerChannel(channel: any) {
+  return new Promise<void>((resolve, reject) => {
+    channel.answer((error: any) => {
+      if (error) {
+        reject(asChannelGoneError(error) ?? error);
+      } else {
+        resolve();
+      }
+    });
+  });
+}
+
+async function addChannelToBridge(bridge: any, channelId: string) {
+  return new Promise<void>((resolve, reject) => {
+    bridge.addChannel({ channel: channelId }, (error: any) => {
+      if (error) {
+        reject(asChannelGoneError(error) ?? error);
+      } else {
+        resolve();
+      }
+    });
+  });
+}
+
+async function hangupChannel(channel: any, params: Record<string, any> = {}) {
+  await new Promise<void>((resolve) => {
+    channel.hangup(params, () => resolve());
+  }).catch(() => {});
+}
+
 async function warmFlowMedia(flow: FlowDefinition) {
   const tasks: Promise<string>[] = [];
   for (const node of flow.nodes) {
@@ -501,8 +575,18 @@ async function playMedia(channel: any, media: string) {
     logger.debug("Starting channel playback", { channelId: channel.id, media });
     channel.play({ media }, (error: any, playback: any) => {
       if (error) {
-        logger.warn("Playback start failed", { channelId: channel.id, media, error: error?.message ?? error });
-        reject(error);
+        const gone = asChannelGoneError(error);
+        if (gone) {
+          logger.info("Playback aborted due to missing channel", {
+            channelId: channel.id,
+            media,
+            error: gone.message,
+          });
+          reject(gone);
+        } else {
+          logger.warn("Playback start failed", { channelId: channel.id, media, error: error?.message ?? error });
+          reject(error);
+        }
         return;
       }
       playback.once("PlaybackFinished", () => {
@@ -514,6 +598,17 @@ async function playMedia(channel: any, media: string) {
         resolve();
       });
       playback.once("PlaybackFailed", (event: any) => {
+        const cause = event?.cause ?? event?.message;
+        const gone = asChannelGoneError(cause);
+        if (gone) {
+          logger.info("Playback stopped because channel went away", {
+            channelId: channel.id,
+            media,
+            cause,
+          });
+          reject(gone);
+          return;
+        }
         logger.warn("Playback failed mid-stream", { channelId: channel.id, media, event });
         reject(new Error(event?.cause ?? "Playback failed"));
       });
@@ -744,25 +839,33 @@ async function handleBridgeStart(event: any, channel: any) {
   const bridgeState = bridges.get(bridgeId);
   if (!bridgeState) {
     logger.debug("Bridge channel arrived with unknown bridge", { sessionId, bridgeId, channelId: channel.id });
-    await new Promise<void>((resolve) => {
-      channel.hangup({}, () => resolve());
-    });
+    await hangupChannel(channel);
     return;
   }
   logger.debug("Bridge channel joining", { sessionId, bridgeId, channelId: channel.id });
   bridgeState.channelId = channel.id;
-  await new Promise<void>((resolve, reject) => {
-    channel.answer((error: any) => {
-      if (error) reject(error);
-      else resolve();
-    });
-  });
-  await new Promise<void>((resolve, reject) => {
-    bridgeState.bridge.addChannel({ channel: channel.id }, (error: any) => {
-      if (error) reject(error);
-      else resolve();
-    });
-  });
+  try {
+    await answerChannel(channel);
+    await addChannelToBridge(bridgeState.bridge, channel.id);
+  } catch (error: any) {
+    if (isChannelGoneError(error)) {
+      logger.info("Bridge channel ended before joining", {
+        sessionId,
+        bridgeId,
+        channelId: channel.id,
+        reason: normalizeErrorMessage(error),
+      });
+    } else {
+      logger.warn("Bridge channel failed to join", {
+        sessionId,
+        bridgeId,
+        channelId: channel.id,
+        error: error?.message ?? error,
+      });
+    }
+    bridgeState.reject(error);
+    await hangupChannel(channel);
+  }
 }
 
 async function handleSessionStart(event: any, channel: any) {
@@ -775,12 +878,23 @@ async function handleSessionStart(event: any, channel: any) {
   warmFlowMedia(state.flow).catch((error: any) => {
     logger.warn("Media warmup failed", { sessionId: state.sessionId, error: error?.message ?? error });
   });
-  await new Promise<void>((resolve, reject) => {
-    channel.answer((error: any) => {
-      if (error) reject(error);
-      else resolve();
-    });
-  });
+  try {
+    await answerChannel(channel);
+  } catch (error: any) {
+    sessionsByChannel.delete(channel.id);
+    if (isChannelGoneError(error)) {
+      log.info("Channel ended before answer", { reason: normalizeErrorMessage(error) });
+      state.completed = true;
+      state.completionSent = true;
+      await notifyPanel("call.hungup", {
+        sessionId: state.sessionId,
+        channelId: channel.id,
+        reason: normalizeErrorMessage(error) || "Channel not found",
+      });
+      return;
+    }
+    throw error;
+  }
   await notifyPanel("call.answered", {
     sessionId: state.sessionId,
     channelId: channel.id,
@@ -789,15 +903,28 @@ async function handleSessionStart(event: any, channel: any) {
   try {
     await runFlow(state);
   } catch (error: any) {
-    log.error("Flow execution failed", { error: error?.message ?? error });
-    await notifyPanel("call.failed", {
-      sessionId: state.sessionId,
-      error: error?.message ?? String(error),
-    });
+    const reason = normalizeErrorMessage(error) || "Flow execution failed";
+    if (isChannelGoneError(error)) {
+      log.info("Channel ended during flow", { reason });
+      state.completed = true;
+      state.completionSent = true;
+      await notifyPanel("call.hungup", {
+        sessionId: state.sessionId,
+        channelId: state.channelId,
+        reason,
+      });
+    } else {
+      log.error("Flow execution failed", { error: error?.message ?? error });
+      await notifyPanel("call.failed", {
+        sessionId: state.sessionId,
+        channelId: state.channelId,
+        error: error?.message ?? String(error),
+      });
+      state.completed = true;
+      state.completionSent = true;
+    }
     sessionsByChannel.delete(channel.id);
-    await new Promise<void>((resolve) => {
-      channel.hangup({}, () => resolve());
-    });
+    await hangupChannel(channel);
   }
 }
 
