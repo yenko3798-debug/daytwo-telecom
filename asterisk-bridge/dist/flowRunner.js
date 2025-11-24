@@ -11,6 +11,7 @@ const STATIC_SOUNDS_ROOT = "/usr/share/asterisk/sounds";
 const STATIC_PREFIX = "custom";
 const STATIC_CACHE_DIR = "/var/lib/asterisk/media-cache";
 let staticDirsReady = null;
+const normalizationTasks = new Map();
 function ensureStaticDirs() {
     if (!staticDirsReady) {
         staticDirsReady = (async () => {
@@ -182,19 +183,41 @@ async function ensureNormalizedVariants(sourceFile) {
     const storageDir = STATIC_PREFIX.length ? join(STATIC_SOUNDS_ROOT, STATIC_PREFIX) : STATIC_SOUNDS_ROOT;
     await fs.mkdir(storageDir, { recursive: true });
     const target = join(storageDir, `${baseId}.ulaw`);
-    const tempWav = join(storageDir, `${baseId}.norm.wav`);
-    logger.debug("Normalizing audio via sox", { sourceFile, tempWav });
-    await normalizeToWav(sourceFile, tempWav);
-    logger.debug("Converting normalized WAV to ulaw", { tempWav, target });
-    await convertWavToUlaw(tempWav, target);
-    await ensureNonEmpty(target);
-    await fs.rm(tempWav, { force: true }).catch(() => { });
-    const ulawStats = await fs.stat(target).catch(() => null);
-    logger.debug("Normalized media ready", {
-        ulawPath: target,
-        ulawBytes: ulawStats?.size ?? 0,
-    });
-    return { wav: tempWav, ulaw: target, id: baseId };
+    if (await fileExists(target)) {
+        await ensureNonEmpty(target);
+        logger.debug("Reusing existing normalized ulaw", { ulawPath: target });
+        return { ulaw: target, id: baseId };
+    }
+    let task = normalizationTasks.get(baseId);
+    if (!task) {
+        task = (async () => {
+            const tempWav = join(storageDir, `${baseId}.norm.wav`);
+            logger.debug("Normalizing audio via sox", { sourceFile, tempWav });
+            await normalizeToWav(sourceFile, tempWav);
+            logger.debug("Converting normalized WAV to ulaw", { tempWav, target });
+            await convertWavToUlaw(tempWav, target);
+            await ensureNonEmpty(target);
+            await fs.rm(tempWav, { force: true }).catch(() => { });
+            const ulawStats = await fs.stat(target).catch(() => null);
+            logger.debug("Normalized media ready", {
+                ulawPath: target,
+                ulawBytes: ulawStats?.size ?? 0,
+            });
+            return { ulaw: target, id: baseId };
+        })()
+            .catch((error) => {
+            logger.error("Normalization task failed", { hash: baseId, error: error?.message ?? error });
+            throw error;
+        })
+            .finally(() => {
+            normalizationTasks.delete(baseId);
+        });
+        normalizationTasks.set(baseId, task);
+    }
+    else {
+        logger.debug("Waiting for in-flight normalization", { hash: baseId });
+    }
+    return task;
 }
 function normalizePrefix(value) {
     if (!value)
