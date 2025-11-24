@@ -217,8 +217,7 @@ async function ensureMedia(playback) {
         ? await downloadToCache(playback.url)
         : await synthesizeTts(playback.text, playback.voice, playback.language);
     const variants = await ensureNormalizedVariants(file);
-    const mediaPath = STATIC_PREFIX.length ? `${STATIC_PREFIX}/${variants.id}` : variants.id;
-    const media = `sound:${mediaPath}`;
+    const media = `sound:${variants.id}`;
     logger.debug("Prepared playback media", { mode: playback.mode, descriptor, media });
     return media;
 }
