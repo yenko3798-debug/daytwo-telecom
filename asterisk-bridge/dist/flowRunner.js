@@ -1,6 +1,6 @@
 import AriClient from "ari-client";
 import { promises as fs } from "fs";
-import { basename, join, relative } from "path";
+import { basename, join } from "path";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { config } from "./config.js";
@@ -158,18 +158,14 @@ const STATIC_SOUNDS_ROOT = "/usr/share/asterisk/sounds";
 const STATIC_PREFIX = "custom";
 async function ensureNormalizedVariants(sourceFile) {
     const baseId = mediaBaseId(sourceFile);
-    const storageDir = join(STATIC_SOUNDS_ROOT, STATIC_PREFIX);
+    const storageDir = STATIC_PREFIX.length ? join(STATIC_SOUNDS_ROOT, STATIC_PREFIX) : STATIC_SOUNDS_ROOT;
     await fs.mkdir(storageDir, { recursive: true });
     const wavPath = join(storageDir, `${baseId}.wav`);
     const ulawPath = join(storageDir, `${baseId}.ulaw`);
-    if (!(await fileExists(wavPath))) {
-        logger.debug("Creating normalized WAV variant", { sourceFile, wavPath });
-        await normalizeToWav(sourceFile, wavPath);
-    }
-    if (!(await fileExists(ulawPath))) {
-        logger.debug("Creating normalized ulaw variant", { wavPath, ulawPath });
-        await convertWavToUlaw(wavPath, ulawPath);
-    }
+    logger.debug("Creating normalized WAV variant", { sourceFile, wavPath });
+    await normalizeToWav(sourceFile, wavPath);
+    logger.debug("Creating normalized ulaw variant", { wavPath, ulawPath });
+    await convertWavToUlaw(wavPath, ulawPath);
     await ensureNonEmpty(ulawPath);
     const wavStats = await fs.stat(wavPath).catch(() => null);
     const ulawStats = await fs.stat(ulawPath).catch(() => null);
@@ -179,7 +175,7 @@ async function ensureNormalizedVariants(sourceFile) {
         ulawPath,
         ulawBytes: ulawStats?.size ?? 0,
     });
-    return { wav: wavPath, ulaw: ulawPath };
+    return { wav: wavPath, ulaw: ulawPath, id: baseId };
 }
 function normalizePrefix(value) {
     if (!value)
@@ -196,14 +192,8 @@ async function ensureMedia(playback) {
         ? await downloadToCache(playback.url)
         : await synthesizeTts(playback.text, playback.voice, playback.language);
     const variants = await ensureNormalizedVariants(file);
-    const relativePath = relative(config.soundsRoot, variants.ulaw).replace(/\\/g, "/").replace(/\.ulaw$/, "");
-    if (relativePath.startsWith("..")) {
-        throw new Error("Media files must be inside ASTERISK_SOUNDS_ROOT");
-    }
-    const sanitizedPath = relativePath.replace(/^\/+/, "");
-    const prefix = normalizePrefix(config.soundPrefix);
-    const needsPrefix = prefix.length > 0 && sanitizedPath.startsWith(prefix) ? sanitizedPath : `${prefix}${sanitizedPath}`;
-    const media = `sound:${needsPrefix}`;
+    const mediaPath = STATIC_PREFIX.length ? `${STATIC_PREFIX}/${variants.id}` : variants.id;
+    const media = `sound:${mediaPath}`;
     logger.debug("Prepared playback media", { mode: playback.mode, descriptor, media });
     return media;
 }
