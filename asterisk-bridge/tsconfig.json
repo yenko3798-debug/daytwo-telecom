@@ -9,6 +9,7 @@
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "skipLibCheck": true,
+    "lib": ["ES2021", "DOM"],
     "types": ["node"]
   },
   "include": ["src/**/*.ts"]

@@ -51,6 +51,10 @@ type CallRow = {
     normalizedNumber?: string | null;
     rawLine: string | null;
   } | null;
+  voicemailDetected?: boolean | null;
+  voicemailConfidence?: number | null;
+  voicemailReason?: string | null;
+  voicemailTranscript?: string | null;
 };
 
 function classNames(...a: Array<string | false | undefined>) {
@@ -264,6 +268,7 @@ export default function CampaignStatusPage() {
                     <th className="px-5 py-4 text-left">Status</th>
                     <th className="px-5 py-4 text-left">Duration</th>
                     <th className="px-5 py-4 text-left">DTMF</th>
+                    <th className="px-5 py-4 text-left">VM</th>
                       <th className="px-5 py-4 text-left">Lead input</th>
                     <th className="px-5 py-4 text-left">Cost</th>
                   </tr>
@@ -298,6 +303,9 @@ export default function CampaignStatusPage() {
                             {r.durationSeconds ? `${r.durationSeconds}s` : "—"}
                           </td>
                           <td className="px-5 py-4 font-mono text-xs text-zinc-500 dark:text-zinc-300">{r.dtmf || ""}</td>
+                          <td className="px-5 py-4">
+                            <VoicemailBadge row={r} />
+                          </td>
                           <td className="px-5 py-4 text-xs text-zinc-500 dark:text-zinc-300">
                             {r.lead?.rawLine ? (
                               <span title={r.lead.rawLine} className="line-clamp-2 max-w-xs">
@@ -366,6 +374,28 @@ function StatusBadge({ value }: { value: string }) {
     <span className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-[11px] font-semibold ring-1 ${m.cls}`}>
       <Icons.Dot className="h-1.5 w-1.5" />
       {m.label}
+    </span>
+  );
+}
+
+function VoicemailBadge({ row }: { row: CallRow }) {
+  if (row.voicemailDetected === null || row.voicemailDetected === undefined) {
+    return <span className="text-xs text-zinc-400">—</span>;
+  }
+  const positive = row.voicemailDetected;
+  const tone = positive
+    ? "bg-rose-500/15 text-rose-600 ring-rose-400/40 dark:text-rose-300"
+    : "bg-emerald-500/15 text-emerald-600 ring-emerald-400/40 dark:text-emerald-300";
+  const label = positive ? "VM" : "Live";
+  const details = row.voicemailReason || (positive ? "Voicemail detected" : "Live party detected");
+  const confidence = typeof row.voicemailConfidence === "number" ? ` · ${(row.voicemailConfidence * 100).toFixed(0)}%` : "";
+  const transcript = row.voicemailTranscript ? `\n${row.voicemailTranscript}` : "";
+  return (
+    <span
+      title={`${details}${confidence}${transcript}`}
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1 ${tone}`}
+    >
+      {label}
     </span>
   );
 }

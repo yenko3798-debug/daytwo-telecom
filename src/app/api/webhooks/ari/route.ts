@@ -13,6 +13,20 @@ const payloadSchema = z.object({
   recordingUrl: z.string().optional(),
   costCents: z.number().int().min(0).optional(),
   metadata: z.record(z.any()).optional(),
+  voicemail: z
+    .object({
+      detected: z.boolean(),
+      confidence: z.number().min(0).max(1).optional(),
+      reason: z.string().optional(),
+      transcript: z.string().optional(),
+      provider: z.string().optional(),
+      model: z.string().optional(),
+      beepDetected: z.boolean().optional(),
+      beepAtMs: z.number().int().min(0).optional(),
+      keywords: z.array(z.string().min(1)).max(32).optional(),
+      raw: z.record(z.any()).optional(),
+    })
+    .optional(),
 });
 
 const statusMap: Record<string, CallStatus> = {
@@ -23,6 +37,7 @@ const statusMap: Record<string, CallStatus> = {
   "call.canceled": CallStatus.CANCELLED,
 };
 const dtmfEvents = new Set(["call.dtmf"]);
+const metadataEvents = new Set(["call.voicemail"]);
 
 export async function POST(req: Request) {
   try {
@@ -31,7 +46,8 @@ export async function POST(req: Request) {
 
     const status = statusMap[body.event];
     const isDtmfEvent = dtmfEvents.has(body.event);
-    if (!status && !isDtmfEvent) {
+    const isMetadataEvent = metadataEvents.has(body.event);
+    if (!status && !isDtmfEvent && !isMetadataEvent) {
       return NextResponse.json({ error: "Unsupported event" }, { status: 400 });
     }
 
@@ -46,6 +62,23 @@ export async function POST(req: Request) {
 
     if (!sessionId) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 });
+    }
+
+    if (isMetadataEvent) {
+      if (!body.voicemail) {
+        return NextResponse.json({ error: "Voicemail payload required" }, { status: 400 });
+      }
+      await prisma.callSession.update({
+        where: { id: sessionId },
+        data: {
+          voicemailDetected: body.voicemail.detected,
+          voicemailConfidence: body.voicemail.confidence ?? null,
+          voicemailReason: body.voicemail.reason ?? null,
+          voicemailTranscript: body.voicemail.transcript ?? null,
+          voicemailRaw: body.voicemail as any,
+        },
+      });
+      return NextResponse.json({ ok: true });
     }
 
     if (isDtmfEvent) {

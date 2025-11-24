@@ -32,7 +32,7 @@ export default function TermsPage(){
 
           <div className="grid grid-cols-1 gap-4">
             <Section title="1. Acceptance of Terms">
-              <p>By accessing or using the AURA Telecom platform (the "Service"), you agree to be bound by these Terms of Service ("Terms"). If you do not agree, do not use the Service.</p>
+              <p>By accessing or using the AURA Telecom platform (the &quot;Service&quot;), you agree to be bound by these Terms of Service (&quot;Terms&quot;). If you do not agree, do not use the Service.</p>
             </Section>
 
             <Section title="2. Description of Service">
@@ -89,7 +89,7 @@ export default function TermsPage(){
             </Section>
 
             <Section title="11. Indemnification (You Hold Us Harmless)">
-              <p>You will defend, indemnify, and hold harmless AURA Telecom and its affiliates, officers, directors, employees, and agents from and against any and all claims, liabilities, damages, losses, and expenses (including reasonable attorneys' fees) arising from or related to: (a) your use of the Service; (b) your content, leads, or recordings; (c) your violation of these Terms or applicable law (including telemarketing and privacy laws); or (d) any dispute between you and any third party.</p>
+              <p>You will defend, indemnify, and hold harmless AURA Telecom and its affiliates, officers, directors, employees, and agents from and against any and all claims, liabilities, damages, losses, and expenses (including reasonable attorneys&rsquo; fees) arising from or related to: (a) your use of the Service; (b) your content, leads, or recordings; (c) your violation of these Terms or applicable law (including telemarketing and privacy laws); or (d) any dispute between you and any third party.</p>
             </Section>
 
             <Section title="12. Termination">
