@@ -4,13 +4,6 @@ import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useTheme } from 'next-themes'
-import {
-  Popover,
-  PopoverBackdrop,
-  PopoverButton,
-  PopoverPanel,
-} from '@headlessui/react'
-import { LayoutGroup, motion } from 'framer-motion'
 import clsx from 'clsx'
 
 const baseNavItems = [
@@ -74,82 +67,113 @@ function ThemeToggle({ className }) {
 function DesktopNav({ pathname, isAdmin }) {
   const items = isAdmin ? [...baseNavItems, { href: '/admin', label: 'Admin' }] : baseNavItems
   return (
-    <LayoutGroup>
-      <nav className="hidden items-center gap-1 rounded-full bg-white/50 p-1 shadow-inner ring-1 ring-zinc-900/10 backdrop-blur-md dark:bg-white/10 dark:ring-white/10 md:flex">
-        {items.map((item) => {
-          const active =
-            pathname === item.href ||
-            (item.href !== '/' && pathname.startsWith(item.href))
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={clsx(
-                'relative inline-flex items-center rounded-full px-4 py-2 text-sm font-medium transition-colors duration-200',
-                active
-                  ? 'text-zinc-900 dark:text-white'
-                  : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-white',
-              )}
-            >
-              {active && (
-                <motion.span
-                  layoutId="nav-active"
-                  transition={{ type: 'spring', stiffness: 420, damping: 38 }}
-                  className="absolute inset-0 rounded-full bg-white/90 shadow-lg ring-1 ring-zinc-900/10 dark:bg-white/10 dark:ring-white/10"
-                />
-              )}
-              <span className="relative z-10">{item.label}</span>
-            </Link>
-          )
-        })}
-      </nav>
-    </LayoutGroup>
+    <nav className="hidden items-center gap-1 rounded-full bg-white/50 p-1 shadow-inner ring-1 ring-zinc-900/10 backdrop-blur-md dark:bg-white/10 dark:ring-white/10 md:flex">
+      {items.map((item) => {
+        const active =
+          pathname === item.href ||
+          (item.href !== '/' && pathname.startsWith(item.href))
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            className={clsx(
+              'relative inline-flex items-center rounded-full px-4 py-2 text-sm font-medium transition-colors duration-200',
+              active
+                ? 'text-zinc-900 dark:text-white'
+                : 'text-zinc-600 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-white',
+            )}
+          >
+            {active ? (
+              <span
+                aria-hidden
+                className="absolute inset-0 rounded-full bg-white/90 shadow-lg ring-1 ring-zinc-900/10 transition duration-200 dark:bg-white/10 dark:ring-white/10"
+              />
+            ) : null}
+            <span className="relative z-10">{item.label}</span>
+          </Link>
+        )
+      })}
+    </nav>
   )
 }
 
 function MobileNav({ pathname, isAdmin }) {
   const items = isAdmin ? [...baseNavItems, { href: '/admin', label: 'Admin' }] : baseNavItems
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    if (!open) return
+    function onKeyDown(event) {
+      if (event.key === 'Escape') setOpen(false)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    document.body.dataset.mobileNav = 'open'
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      document.body.style.overflow = ''
+      delete document.body.dataset.mobileNav
+    }
+  }, [open])
+
+  useEffect(() => {
+    setOpen(false)
+  }, [pathname])
+
   return (
-    <Popover className="md:hidden">
-      <PopoverButton className="inline-flex items-center rounded-full bg-white/70 px-3 py-2 text-sm font-semibold text-zinc-800 shadow-sm ring-1 ring-zinc-900/10 backdrop-blur transition duration-200 hover:bg-white dark:bg-white/10 dark:text-zinc-100 dark:ring-white/10">
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="inline-flex items-center rounded-full bg-white/70 px-3 py-2 text-sm font-semibold text-zinc-800 shadow-sm ring-1 ring-zinc-900/10 backdrop-blur transition duration-200 hover:bg-white dark:bg-white/10 dark:text-zinc-100 dark:ring-white/10 md:hidden"
+      >
         Menu
-      </PopoverButton>
-      <PopoverBackdrop className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm duration-200 data-closed:opacity-0" />
-      <PopoverPanel className="fixed inset-x-4 top-28 z-50 origin-top rounded-3xl bg-[#f8f6f1]/95 p-4 shadow-2xl ring-1 ring-zinc-900/10 transition duration-200 data-closed:-translate-y-3 data-closed:opacity-0 dark:bg-[#0b0d13]/95 dark:ring-white/10">
-        <div className="flex flex-col gap-2">
-          {items.map((item) => {
-            const active =
-              pathname === item.href ||
-              (item.href !== '/' && pathname.startsWith(item.href))
-            return (
+      </button>
+      {open ? (
+        <>
+          <div
+            className="fixed inset-0 z-40 bg-black/40 backdrop-blur-sm"
+            onClick={() => setOpen(false)}
+          />
+          <div className="fixed inset-x-4 top-28 z-50 origin-top rounded-3xl bg-[#f8f6f1]/95 p-4 shadow-2xl ring-1 ring-zinc-900/10 transition duration-200 dark:bg-[#0b0d13]/95 dark:ring-white/10">
+            <div className="flex flex-col gap-2">
+              {items.map((item) => {
+                const active =
+                  pathname === item.href ||
+                  (item.href !== '/' && pathname.startsWith(item.href))
+                return (
+                  <Link
+                    key={item.href}
+                    href={item.href}
+                    onClick={() => setOpen(false)}
+                    className={clsx(
+                      'flex items-center justify-between rounded-2xl px-4 py-3 text-base font-semibold transition',
+                      active
+                        ? 'bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-900/10 dark:bg-white/10 dark:text-white dark:ring-white/10'
+                        : 'bg-white/55 text-zinc-600 hover:bg-white dark:bg-white/5 dark:text-zinc-300 dark:hover:bg-white/10',
+                    )}
+                  >
+                    <span>{item.label}</span>
+                    {active ? (
+                      <span className="text-xs font-medium uppercase tracking-wide text-emerald-500">
+                        Active
+                      </span>
+                    ) : null}
+                  </Link>
+                )
+              })}
               <Link
-                key={item.href}
-                href={item.href}
-                className={clsx(
-                  'flex items-center justify-between rounded-2xl px-4 py-3 text-base font-semibold transition',
-                  active
-                    ? 'bg-white text-zinc-900 shadow-sm ring-1 ring-zinc-900/10 dark:bg-white/10 dark:text-white dark:ring-white/10'
-                    : 'bg-white/55 text-zinc-600 hover:bg-white dark:bg-white/5 dark:text-zinc-300 dark:hover:bg-white/10',
-                )}
+                href="/auth/login"
+                onClick={() => setOpen(false)}
+                className="mt-2 inline-flex items-center justify-center rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-sky-500 px-4 py-3 text-sm font-semibold text-white shadow-[0_18px_32px_rgba(13,148,136,0.38)] transition hover:shadow-[0_24px_40px_rgba(13,148,136,0.46)]"
               >
-                <span>{item.label}</span>
-                {active && (
-                  <span className="text-xs font-medium uppercase tracking-wide text-emerald-500">
-                    Active
-                  </span>
-                )}
+                Account
               </Link>
-            )
-          })}
-          <Link
-            href="/auth/login"
-            className="mt-2 inline-flex items-center justify-center rounded-2xl bg-gradient-to-r from-emerald-500 via-teal-500 to-sky-500 px-4 py-3 text-sm font-semibold text-white shadow-[0_18px_32px_rgba(13,148,136,0.38)] transition hover:shadow-[0_24px_40px_rgba(13,148,136,0.46)]"
-          >
-            Account
-          </Link>
-        </div>
-      </PopoverPanel>
-    </Popover>
+            </div>
+          </div>
+        </>
+      ) : null}
+    </>
   )
 }
 

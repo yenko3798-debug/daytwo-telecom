@@ -2,7 +2,6 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { motion, AnimatePresence } from "framer-motion";
 import { PageFrame, MotionCard, ShimmerTile, ShimmerRows } from "@/components/ui/LuxuryPrimitives";
 import { usePageLoading } from "@/hooks/usePageLoading";
 import { useLiveMetrics } from "@/hooks/useLiveMetrics";
@@ -290,33 +289,25 @@ function ActivityList({ items, loading }: { items: LiveMetrics["feed"]; loading?
     }
     return (
         <div className="divide-y divide-zinc-900/10 dark:divide-white/10">
-            <AnimatePresence initial={false}>
-                {rows.map((r) => (
-                    <motion.div
-                        key={r.id}
-                        initial={{ opacity: 0, y: -6 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -6 }}
-                        className="flex flex-col gap-1 py-2"
-                    >
-                        <div className="flex flex-wrap items-center gap-2 text-sm">
-                            <span className="font-medium text-zinc-900 dark:text-zinc-100">{r.callerId ?? "Unknown"}</span>
-                            <span className="text-zinc-500">→</span>
-                            <span className="text-zinc-700 dark:text-zinc-200">{r.dialedNumber ?? "—"}</span>
-                            <StatusBadge value={r.status} />
-                            {r.dtmf ? (
-                                <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 font-mono text-[11px] text-emerald-600 dark:text-emerald-300">
-                                    DTMF {r.dtmf}
-                                </span>
-                            ) : null}
-                        </div>
-                        <div className="flex justify-between text-xs text-zinc-500 dark:text-zinc-400">
-                            <span>{new Date(r.createdAt).toLocaleTimeString()} • {r.campaign.name}</span>
-                            {r.lead?.rawLine ? <span className="truncate text-right" title={r.lead.rawLine}>{r.lead.rawLine}</span> : null}
-                        </div>
-                    </motion.div>
-                ))}
-            </AnimatePresence>
+            {rows.map((r) => (
+                <div key={r.id} className="flex flex-col gap-1 py-2 transition duration-200 hover:bg-white/30 dark:hover:bg-white/5">
+                    <div className="flex flex-wrap items-center gap-2 text-sm">
+                        <span className="font-medium text-zinc-900 dark:text-zinc-100">{r.callerId ?? "Unknown"}</span>
+                        <span className="text-zinc-500">→</span>
+                        <span className="text-zinc-700 dark:text-zinc-200">{r.dialedNumber ?? "—"}</span>
+                        <StatusBadge value={r.status} />
+                        {r.dtmf ? (
+                            <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 font-mono text-[11px] text-emerald-600 dark:text-emerald-300">
+                                DTMF {r.dtmf}
+                            </span>
+                        ) : null}
+                    </div>
+                    <div className="flex justify-between text-xs text-zinc-500 dark:text-zinc-400">
+                        <span>{new Date(r.createdAt).toLocaleTimeString()} • {r.campaign.name}</span>
+                        {r.lead?.rawLine ? <span className="truncate text-right" title={r.lead.rawLine}>{r.lead.rawLine}</span> : null}
+                    </div>
+                </div>
+            ))}
         </div>
     );
 }
