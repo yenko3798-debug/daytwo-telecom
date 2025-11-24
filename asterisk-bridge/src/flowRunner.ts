@@ -293,7 +293,7 @@ async function fileExists(path: string) {
 }
 
 async function normalizeToWav(input: string, output: string) {
-  const tmp = `${output}.tmp`;
+  const tmp = `${output}.tmp.wav`;
   await fs.rm(tmp, { force: true }).catch(() => {});
   const soxArgs = [input, "-r", "8000", "-c", "1", "-b", "16", "-e", "signed-integer", tmp];
   logger.debug("Normalizing audio via sox", { input, output, binary: SOX_BIN });
@@ -315,7 +315,7 @@ async function normalizeToWav(input: string, output: string) {
 }
 
 async function convertWavToUlaw(input: string, output: string) {
-  const tmp = `${output}.tmp`;
+  const tmp = `${output}.tmp.wav`;
   await fs.rm(tmp, { force: true }).catch(() => {});
   const soxArgs = [input, "-t", "ulaw", "-r", "8000", "-c", "1", tmp];
   logger.debug("Converting WAV to ulaw via sox", { input, output, binary: SOX_BIN });
