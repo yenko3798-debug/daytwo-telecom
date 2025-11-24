@@ -1,6 +1,6 @@
 import AriClient from "ari-client";
 import { promises as fs } from "fs";
-import { basename, dirname, join, relative } from "path";
+import { basename, join } from "path";
 import { execFile } from "child_process";
 import { promisify } from "util";
 import { config } from "./config.js";
@@ -8,6 +8,21 @@ import { hashKey, newId } from "./utils.js";
 import { logger } from "./logger.js";
 
 const execFileAsync = promisify(execFile);
+const STATIC_SOUNDS_ROOT = "/usr/share/asterisk/sounds";
+const STATIC_PREFIX = "custom";
+const STATIC_CACHE_DIR = "/var/lib/asterisk/media-cache";
+let staticDirsReady: Promise<void> | null = null;
+
+function ensureStaticDirs() {
+  if (!staticDirsReady) {
+    staticDirsReady = (async () => {
+      await fs.mkdir(STATIC_CACHE_DIR, { recursive: true }).catch(() => {});
+      const soundsDir = STATIC_PREFIX.length ? join(STATIC_SOUNDS_ROOT, STATIC_PREFIX) : STATIC_SOUNDS_ROOT;
+      await fs.mkdir(soundsDir, { recursive: true }).catch(() => {});
+    })();
+  }
+  return staticDirsReady;
+}
 
 type PlaybackTts = {
   mode: "tts";
@@ -204,11 +219,12 @@ async function ensureNonEmpty(file: string) {
 }
 
 async function downloadToCache(url: string) {
+  await ensureStaticDirs();
   const absoluteUrl = resolveMediaUrl(url);
   const key = hashKey(absoluteUrl);
   const extensionMatch = absoluteUrl.match(/\.(wav|ulaw|sln16|gsm|mp3|ogg)(\?.*)?$/i);
   const extension = extensionMatch ? extensionMatch[1].toLowerCase() : "wav";
-  const file = join(config.cacheDir, `${key}.${extension}`);
+  const file = join(STATIC_CACHE_DIR, `${key}.${extension}`);
   try {
     await fs.access(file);
     logger.debug("Media cache hit", { url: absoluteUrl, file });
@@ -227,11 +243,12 @@ async function downloadToCache(url: string) {
 }
 
 async function synthesizeTts(text: string, voice?: string, language?: string) {
+  await ensureStaticDirs();
   if (config.ttsProvider !== "pico") {
     throw new Error("Unsupported TTS provider");
   }
   const key = hashKey(`${language ?? "en-US"}:${voice ?? "default"}:${text}`);
-  const file = join(config.cacheDir, `${key}.wav`);
+  const file = join(STATIC_CACHE_DIR, `${key}.wav`);
   try {
     await fs.access(file);
     logger.debug("TTS cache hit", { file, voice, language });
@@ -294,10 +311,8 @@ async function convertWavToUlaw(input: string, output: string) {
   return output;
 }
 
-const STATIC_SOUNDS_ROOT = "/usr/share/asterisk/sounds";
-const STATIC_PREFIX = "custom";
-
 async function ensureNormalizedVariants(sourceFile: string) {
+  await ensureStaticDirs();
   const baseId = mediaBaseId(sourceFile);
   const storageDir = STATIC_PREFIX.length ? join(STATIC_SOUNDS_ROOT, STATIC_PREFIX) : STATIC_SOUNDS_ROOT;
   await fs.mkdir(storageDir, { recursive: true });

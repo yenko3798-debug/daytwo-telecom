@@ -7,6 +7,20 @@ import { config } from "./config.js";
 import { hashKey, newId } from "./utils.js";
 import { logger } from "./logger.js";
 const execFileAsync = promisify(execFile);
+const STATIC_SOUNDS_ROOT = "/usr/share/asterisk/sounds";
+const STATIC_PREFIX = "custom";
+const STATIC_CACHE_DIR = "/var/lib/asterisk/media-cache";
+let staticDirsReady = null;
+function ensureStaticDirs() {
+    if (!staticDirsReady) {
+        staticDirsReady = (async () => {
+            await fs.mkdir(STATIC_CACHE_DIR, { recursive: true }).catch(() => { });
+            const soundsDir = STATIC_PREFIX.length ? join(STATIC_SOUNDS_ROOT, STATIC_PREFIX) : STATIC_SOUNDS_ROOT;
+            await fs.mkdir(soundsDir, { recursive: true }).catch(() => { });
+        })();
+    }
+    return staticDirsReady;
+}
 let client;
 const sessionsByChannel = new Map();
 const bridges = new Map();
@@ -66,11 +80,12 @@ async function ensureNonEmpty(file) {
     }
 }
 async function downloadToCache(url) {
+    await ensureStaticDirs();
     const absoluteUrl = resolveMediaUrl(url);
     const key = hashKey(absoluteUrl);
     const extensionMatch = absoluteUrl.match(/\.(wav|ulaw|sln16|gsm|mp3|ogg)(\?.*)?$/i);
     const extension = extensionMatch ? extensionMatch[1].toLowerCase() : "wav";
-    const file = join(config.cacheDir, `${key}.${extension}`);
+    const file = join(STATIC_CACHE_DIR, `${key}.${extension}`);
     try {
         await fs.access(file);
         logger.debug("Media cache hit", { url: absoluteUrl, file });
@@ -89,11 +104,12 @@ async function downloadToCache(url) {
     }
 }
 async function synthesizeTts(text, voice, language) {
+    await ensureStaticDirs();
     if (config.ttsProvider !== "pico") {
         throw new Error("Unsupported TTS provider");
     }
     const key = hashKey(`${language ?? "en-US"}:${voice ?? "default"}:${text}`);
-    const file = join(config.cacheDir, `${key}.wav`);
+    const file = join(STATIC_CACHE_DIR, `${key}.wav`);
     try {
         await fs.access(file);
         logger.debug("TTS cache hit", { file, voice, language });
@@ -154,9 +170,8 @@ async function convertWavToUlaw(input, output) {
     await fs.rename(tmp, output);
     return output;
 }
-const STATIC_SOUNDS_ROOT = "/usr/share/asterisk/sounds";
-const STATIC_PREFIX = "custom";
 async function ensureNormalizedVariants(sourceFile) {
+    await ensureStaticDirs();
     const baseId = mediaBaseId(sourceFile);
     const storageDir = STATIC_PREFIX.length ? join(STATIC_SOUNDS_ROOT, STATIC_PREFIX) : STATIC_SOUNDS_ROOT;
     await fs.mkdir(storageDir, { recursive: true });
