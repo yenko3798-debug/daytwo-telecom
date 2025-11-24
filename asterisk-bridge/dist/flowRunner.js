@@ -156,8 +156,11 @@ async function convertWavToUlaw(input, output) {
 }
 async function ensureNormalizedVariants(sourceFile) {
     const baseId = mediaBaseId(sourceFile);
-    const wavPath = join(config.soundsDir, `${baseId}.wav`);
-    const ulawPath = join(config.soundsDir, `${baseId}.ulaw`);
+    const prefixDir = normalizePrefix(config.soundPrefix);
+    const storageDir = prefixDir ? join(config.soundsDir, prefixDir) : config.soundsDir;
+    await fs.mkdir(storageDir, { recursive: true });
+    const wavPath = join(storageDir, `${baseId}.wav`);
+    const ulawPath = join(storageDir, `${baseId}.ulaw`);
     if (!(await fileExists(wavPath))) {
         logger.debug("Creating normalized WAV variant", { sourceFile, wavPath });
         await normalizeToWav(sourceFile, wavPath);

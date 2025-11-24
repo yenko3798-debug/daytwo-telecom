@@ -1280,7 +1280,7 @@ function PlaybackEditor({ playback, onChange, uploadAudio, label }: PlaybackEdit
       const result = await uploadAudio(file);
       onChange({
         mode: "file",
-        url: result.url,
+        url: result.publicUrl ?? result.url,
         mimeType: result.mimeType ?? file.type,
       });
     } catch {
