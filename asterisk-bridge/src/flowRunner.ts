@@ -318,10 +318,18 @@ async function ensureNormalizedVariants(sourceFile: string) {
   await fs.mkdir(storageDir, { recursive: true });
   const wavPath = join(storageDir, `${baseId}.wav`);
   const ulawPath = join(storageDir, `${baseId}.ulaw`);
-  logger.debug("Creating normalized WAV variant", { sourceFile, wavPath });
-  await normalizeToWav(sourceFile, wavPath);
-  logger.debug("Creating normalized ulaw variant", { wavPath, ulawPath });
-  await convertWavToUlaw(wavPath, ulawPath);
+  if (!(await fileExists(wavPath))) {
+    logger.debug("Creating normalized WAV variant", { sourceFile, wavPath });
+    await normalizeToWav(sourceFile, wavPath);
+  } else {
+    logger.debug("Normalized WAV already exists", { wavPath });
+  }
+  if (!(await fileExists(ulawPath))) {
+    logger.debug("Creating normalized ulaw variant", { wavPath, ulawPath });
+    await convertWavToUlaw(wavPath, ulawPath);
+  } else {
+    logger.debug("Normalized ulaw already exists", { ulawPath });
+  }
   await ensureNonEmpty(ulawPath);
   const wavStats = await fs.stat(wavPath).catch(() => null);
   const ulawStats = await fs.stat(ulawPath).catch(() => null);
