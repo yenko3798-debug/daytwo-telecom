@@ -297,7 +297,8 @@ async function convertWavToUlaw(input: string, output: string) {
 async function ensureNormalizedVariants(sourceFile: string) {
   const baseId = mediaBaseId(sourceFile);
   const prefixDir = normalizePrefix(config.soundPrefix);
-  const storageDir = prefixDir ? join(config.soundsDir, prefixDir) : config.soundsDir;
+  const storageRoot = config.soundsRoot;
+  const storageDir = prefixDir ? join(storageRoot, prefixDir) : storageRoot;
   await fs.mkdir(storageDir, { recursive: true });
   const wavPath = join(storageDir, `${baseId}.wav`);
   const ulawPath = join(storageDir, `${baseId}.ulaw`);
