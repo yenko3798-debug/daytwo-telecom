@@ -179,10 +179,12 @@ export default function StartCampaignPage() {
   const [callerId, setCallerId] = useState("");
   const [selectedFlow, setSelectedFlow] = useState<string>("");
   const [selectedRoute, setSelectedRoute] = useState<string>("");
-    const [callsPerMinute, setCallsPerMinute] = useState(60);
-    const [maxConcurrentCalls, setMaxConcurrentCalls] = useState(10);
-    const [ringTimeout, setRingTimeout] = useState(45);
-    const [description, setDescription] = useState("");
+  const [callsPerMinute, setCallsPerMinute] = useState(60);
+  const [maxConcurrentCalls, setMaxConcurrentCalls] = useState(10);
+  const [ringTimeout, setRingTimeout] = useState(45);
+  const [description, setDescription] = useState("");
+  const [voicemailDetectionEnabled, setVoicemailDetectionEnabled] = useState(true);
+  const [voicemailSensitivity, setVoicemailSensitivity] = useState(0.6);
 
     const [rawLeadText, setRawLeadText] = useState("");
     const [leads, setLeads] = useState<ParsedLead[]>([]);
@@ -327,6 +329,18 @@ export default function StartCampaignPage() {
         callsPerMinute,
         maxConcurrentCalls,
         ringTimeoutSeconds: ringTimeout,
+        metadata: {
+          voicemailDetection: {
+            enabled: voicemailDetectionEnabled,
+            sensitivity: Number(voicemailSensitivity.toFixed(2)),
+            provider: "openai",
+            transcriptionModel: "whisper-1",
+            sampleSeconds: 18,
+            beepThreshold: 0.58,
+            minBeepMs: 70,
+            keywords: ["leave a message", "tone", "after the beep", "voicemail"],
+          },
+        },
       };
       const res = await fetch("/api/campaigns", {
         method: "POST",
@@ -367,6 +381,8 @@ export default function StartCampaignPage() {
     callsPerMinute,
     maxConcurrentCalls,
     ringTimeout,
+    voicemailDetectionEnabled,
+    voicemailSensitivity,
     push,
   ]);
 
@@ -562,6 +578,54 @@ export default function StartCampaignPage() {
                   className="mt-1 w-full rounded-xl border border-white/60 bg-white/70 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400/40 dark:border-white/10 dark:bg-white/5 dark:text-white"
                 />
               </div>
+            </div>
+
+            <div className="rounded-2xl border border-white/60 bg-white/60 p-4 dark:border-white/10 dark:bg-white/5">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <div className="text-sm font-semibold text-zinc-700 dark:text-zinc-200">
+                    Voicemail detection
+                  </div>
+                  <div className="text-xs text-zinc-500 dark:text-zinc-400">
+                    Capture the first 18 seconds and classify beeps with AI transcription.
+                  </div>
+                </div>
+                <label className="inline-flex items-center gap-2 rounded-full border border-white/60 bg-white/70 px-3 py-1.5 text-xs text-zinc-600 transition hover:bg-white dark:border-white/10 dark:bg-white/5 dark:text-white dark:hover:bg-white/10">
+                  <input
+                    type="checkbox"
+                    checked={voicemailDetectionEnabled}
+                    onChange={(event) => setVoicemailDetectionEnabled(event.target.checked)}
+                    className="h-4 w-4 accent-emerald-500"
+                  />
+                  Enabled
+                </label>
+              </div>
+              {voicemailDetectionEnabled ? (
+                <div className="mt-4 space-y-3">
+                  <div>
+                    <div className="flex items-center justify-between text-xs text-zinc-500 dark:text-zinc-400">
+                      <span>Confidence threshold</span>
+                      <span>{Math.round(voicemailSensitivity * 100)}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0.4}
+                      max={0.9}
+                      step={0.01}
+                      value={voicemailSensitivity}
+                      onChange={(event) => setVoicemailSensitivity(Number(event.target.value))}
+                      className="mt-2 w-full accent-emerald-500"
+                    />
+                  </div>
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                    Threshold controls how aggressively we flag voicemail based on beep detection and transcript keywords.
+                  </p>
+                </div>
+              ) : (
+                <p className="mt-3 text-xs text-zinc-500 dark:text-zinc-400">
+                  Detection is disabled. Calls will run through the full flow even if voicemail answers.
+                </p>
+              )}
             </div>
 
             <div className="rounded-2xl border border-white/60 bg-white/60 p-4 dark:border-white/10 dark:bg-white/5">

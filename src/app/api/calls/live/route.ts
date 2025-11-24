@@ -54,6 +54,10 @@ async function fetchCalls(where: Prisma.CallSessionWhereInput, limit: number) {
           rawLine: rawLineFromMetadata(call.lead.metadata),
         }
       : null,
+    voicemailDetected: call.voicemailDetected,
+    voicemailConfidence: call.voicemailConfidence,
+    voicemailReason: call.voicemailReason,
+    voicemailTranscript: call.voicemailTranscript,
   }));
 }
 

@@ -6,6 +6,7 @@ import { promisify } from "util";
 import { config } from "./config.js";
 import { hashKey, newId } from "./utils.js";
 import { logger } from "./logger.js";
+import { startVoicemailDetection } from "./voicemailDetector.js";
 
 const execFileAsync = promisify(execFile);
 const STATIC_SOUNDS_ROOT = "/usr/share/asterisk/sounds";
@@ -162,6 +163,7 @@ type SessionState = {
   variables: Record<string, string>;
   completed: boolean;
   completionSent: boolean;
+  voicemailStarted?: boolean;
 };
 
 let client: any;
@@ -929,6 +931,23 @@ async function handleSessionStart(event: any, channel: any) {
     sessionId: state.sessionId,
     channelId: channel.id,
   });
+  if (!state.voicemailStarted) {
+    state.voicemailStarted = true;
+    const campaignMeta =
+      state.payload.campaign.metadata &&
+      typeof state.payload.campaign.metadata === "object" &&
+      !Array.isArray(state.payload.campaign.metadata)
+        ? (state.payload.campaign.metadata as Record<string, any>).voicemailDetection
+        : undefined;
+    startVoicemailDetection({
+      client,
+      channel: state.channel,
+      sessionId: state.sessionId,
+      channelId: state.channelId,
+      metadata: campaignMeta,
+      onResult: (body) => notifyPanel("call.voicemail", body),
+    });
+  }
   log.info("Channel answered", { channelId: channel.id });
   try {
     await runFlow(state);

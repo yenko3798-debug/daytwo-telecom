@@ -47,6 +47,14 @@ ensureDir(soundsRoot);
 ensureDir(soundsDir);
 ensureDir(cacheDir);
 
+const openAiApiKey = optionalEnv("OPENAI_API_KEY");
+const transcriptionProvider = optionalEnv("TRANSCRIPTION_PROVIDER") ?? "openai";
+const transcriptionModel = optionalEnv("TRANSCRIPTION_MODEL") ?? "whisper-1";
+const voicemailSampleSeconds = Number.parseInt(optionalEnv("VOICEMAIL_SAMPLE_SECONDS") ?? "18", 10);
+const voicemailSensitivity = Number.parseFloat(optionalEnv("VOICEMAIL_SENSITIVITY") ?? "0.55");
+const voicemailBeepThreshold = Number.parseFloat(optionalEnv("VOICEMAIL_BEEP_THRESHOLD") ?? "0.58");
+const voicemailMinBeepMs = Number.parseInt(optionalEnv("VOICEMAIL_MIN_BEEP_MS") ?? "70", 10);
+
 export const config = {
   httpPort,
   bridgeToken: requireEnv("BRIDGE_TOKEN"),
@@ -68,6 +76,13 @@ export const config = {
   soundPrefix,
   soundExtension,
   ttsProvider: optionalEnv("TTS_PROVIDER") ?? "pico",
+  openAiApiKey,
+  transcriptionProvider,
+  transcriptionModel,
+  voicemailSampleSeconds,
+  voicemailSensitivity,
+  voicemailBeepThreshold,
+  voicemailMinBeepMs,
   ringTimeout,
   dialTimeout,
   logLevel: optionalEnv("LOG_LEVEL") ?? "info",

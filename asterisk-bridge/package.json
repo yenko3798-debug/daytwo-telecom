@@ -11,7 +11,8 @@
   "dependencies": {
     "ari-client": "^2.1.1",
     "dotenv": "^16.4.5",
-    "fastify": "^4.26.2"
+    "fastify": "^4.26.2",
+    "node-wav": "^0.0.2"
   },
   "devDependencies": {
     "@types/ari-client": "^2.2.13",

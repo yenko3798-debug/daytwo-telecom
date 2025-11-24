@@ -228,6 +228,11 @@ model CallSession {
   recordingUrl    String?
   metadata        Json?
   error           String?
+  voicemailDetected    Boolean?
+  voicemailConfidence  Float?
+  voicemailReason      String?
+  voicemailTranscript  String?
+  voicemailRaw         Json?
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
